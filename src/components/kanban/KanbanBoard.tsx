@@ -132,12 +132,12 @@ export function KanbanBoard() {
     }
   }
 
-  async function createTask(columnId: string, title: string) {
+  async function createTask(columnId: string, title: string, extraData: Partial<Task> = {}) {
     try {
       const res = await fetch('/api/kanban/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ column_id: columnId, title }),
+        body: JSON.stringify({ column_id: columnId, title, ...extraData }),
       })
       
       if (res.ok) {
@@ -150,6 +150,17 @@ export function KanbanBoard() {
 
   async function updateTask(taskId: string, updates: Partial<Task>) {
     try {
+      // Handle delete (title empty)
+      if ((updates as any).title === '') {
+        const res = await fetch(`/api/kanban/tasks?id=${taskId}`, {
+          method: 'DELETE',
+        })
+        if (res.ok) {
+          fetchBoards()
+        }
+        return
+      }
+
       const res = await fetch('/api/kanban/tasks', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
