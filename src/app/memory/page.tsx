@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Folder, File, ChevronRight, ChevronDown } from 'lucide-react'
+import { Folder, File } from 'lucide-react'
 
 const memoryFiles = [
   { path: 'MEMORY.md', size: '4.7KB', modified: '2026-03-27' },
@@ -12,10 +12,11 @@ const memoryFiles = [
 ]
 
 const agents = ['main', 'coach', 'engineer', 'researcher', 'health']
-const [selectedAgent, setSelectedAgent] = useState('main')
-const [selectedFile, setSelectedFile] = useState<string | null>(null)
 
 export default function MemoryPage() {
+  const [selectedAgent, setSelectedAgent] = useState('main')
+  const [selectedFile, setSelectedFile] = useState<string | null>(null)
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold">Memory Browser</h2>
