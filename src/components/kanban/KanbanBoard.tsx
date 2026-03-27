@@ -150,17 +150,6 @@ export function KanbanBoard() {
 
   async function updateTask(taskId: string, updates: Partial<Task>) {
     try {
-      // Handle delete (title empty)
-      if ((updates as any).title === '') {
-        const res = await fetch(`/api/kanban/tasks?id=${taskId}`, {
-          method: 'DELETE',
-        })
-        if (res.ok) {
-          fetchBoards()
-        }
-        return
-      }
-
       const res = await fetch('/api/kanban/tasks', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -172,6 +161,19 @@ export function KanbanBoard() {
       }
     } catch (e) {
       console.error('Failed to update task:', e)
+    }
+  }
+
+  async function deleteTask(taskId: string) {
+    try {
+      const res = await fetch(`/api/kanban/tasks?id=${taskId}`, {
+        method: 'DELETE',
+      })
+      if (res.ok) {
+        fetchBoards()
+      }
+    } catch (e) {
+      console.error('Failed to delete task:', e)
     }
   }
 
@@ -224,7 +226,10 @@ export function KanbanBoard() {
     // Check if dropping on another task
     const overTask = findTask(overId)
     if (overTask && activeTask.column_id !== overTask.column_id) {
-      moveTask(activeId, overTask.column_id, overTask.position)
+      // Cross-column drop: put at end of target column
+      const targetColumn = activeBoard?.columns.find(c => c.id === overTask.column_id)
+      const maxPosition = Math.max(...(targetColumn?.tasks.map(t => t.position) || [-1]))
+      moveTask(activeId, overTask.column_id, maxPosition + 1)
     } else if (overTask && activeId !== overId) {
       // Reorder within same column
       const column = activeBoard?.columns.find(c => c.id === activeTask.column_id)
@@ -346,8 +351,9 @@ export function KanbanBoard() {
                   <KanbanColumn
                     key={column.id}
                     column={column}
-                    onAddTask={(title) => createTask(column.id, title)}
+                    onAddTask={(colId, title, data) => createTask(colId, title, data)}
                     onUpdateTask={(taskId, updates) => updateTask(taskId, updates)}
+                    onDeleteTask={(taskId) => deleteTask(taskId)}
                   />
                 ))}
             </div>

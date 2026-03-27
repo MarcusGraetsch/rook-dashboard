@@ -30,11 +30,12 @@ interface Column {
 
 interface Props {
   column: Column
-  onAddTask: (title: string, data: Partial<Task>) => void
+  onAddTask: (columnId: string, title: string, data: Partial<Task>) => void
   onUpdateTask: (taskId: string, updates: Partial<Task>) => void
+  onDeleteTask: (taskId: string) => void
 }
 
-export function KanbanColumn({ column, onAddTask, onUpdateTask }: Props) {
+export function KanbanColumn({ column, onAddTask, onUpdateTask, onDeleteTask }: Props) {
   const [isAdding, setIsAdding] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [showFullModal, setShowFullModal] = useState(false)
@@ -45,13 +46,14 @@ export function KanbanColumn({ column, onAddTask, onUpdateTask }: Props) {
 
   function handleAddTask() {
     if (!newTaskTitle.trim()) return
-    onAddTask(newTaskTitle, {})
+    onAddTask(column.id, newTaskTitle, {})
     setNewTaskTitle('')
     setIsAdding(false)
   }
 
   function handleFullCreate(taskData: Partial<Task>) {
-    onAddTask(taskData.title || '', taskData)
+    if (!taskData.title?.trim()) return
+    onAddTask(column.id, taskData.title, taskData)
     setShowFullModal(false)
     setNewTaskTitle('')
     setIsAdding(false)
@@ -98,7 +100,8 @@ export function KanbanColumn({ column, onAddTask, onUpdateTask }: Props) {
                 <KanbanCard
                   key={task.id}
                   task={task}
-                  onUpdate={(updates) => onUpdateTask(task.id, updates)}
+                  onUpdate={onUpdateTask}
+                  onDelete={onDeleteTask}
                 />
               ))}
           </SortableContext>

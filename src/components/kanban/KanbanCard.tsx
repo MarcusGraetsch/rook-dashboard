@@ -21,7 +21,8 @@ interface Task {
 interface Props {
   task: Task
   isDragging?: boolean
-  onUpdate?: (updates: Partial<Task>) => void
+  onUpdate?: (taskId: string, updates: Partial<Task>) => void
+  onDelete?: (taskId: string) => void
 }
 
 const priorityColors = {
@@ -47,7 +48,7 @@ const ASSIGNEE_NAMES: Record<string, string> = {
   consultant: '💼 Consultant',
 }
 
-export function KanbanCard({ task, isDragging, onUpdate }: Props) {
+export function KanbanCard({ task, isDragging, onUpdate, onDelete }: Props) {
   const [showModal, setShowModal] = useState(false)
 
   const {
@@ -66,24 +67,31 @@ export function KanbanCard({ task, isDragging, onUpdate }: Props) {
   }
 
   function handleSave(updates: Partial<Task>) {
-    onUpdate?.(updates)
+    onUpdate?.(task.id, updates)
     setShowModal(false)
   }
 
   function handleDelete() {
-    onUpdate?.({ title: '' } as any)
+    onDelete?.(task.id)
     setShowModal(false)
   }
 
   const labels = task.labels && task.labels !== '[]' ? JSON.parse(task.labels) : []
   const isOverdue = task.due_date && new Date(task.due_date) < new Date()
 
+  const priorityBorder = {
+    low: 'border-l-gray-400',
+    medium: 'border-l-blue-500',
+    high: 'border-l-orange-500',
+    urgent: 'border-l-red-500',
+  }[task.priority]
+
   return (
     <>
       <div
         ref={setNodeRef}
         style={style}
-        className={`bg-secondary rounded p-3 border border-gray-700 cursor-pointer hover:border-highlight ${
+        className={`bg-secondary rounded p-3 border border-gray-700 border-l-4 ${priorityBorder} cursor-pointer hover:border-highlight ${
           isDragging ? 'shadow-lg' : ''
         } ${isSortableDragging ? 'opacity-50' : ''}`}
         onClick={() => setShowModal(true)}
@@ -100,6 +108,13 @@ export function KanbanCard({ task, isDragging, onUpdate }: Props) {
           
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium break-words">{task.title}</p>
+            
+            {/* Description Preview */}
+            {task.description && (
+              <p className="text-xs text-gray-400 mt-1 break-words line-clamp-2">
+                {task.description}
+              </p>
+            )}
             
             {/* Labels */}
             {labels.length > 0 && (
@@ -125,7 +140,8 @@ export function KanbanCard({ task, isDragging, onUpdate }: Props) {
 
                 {/* Due Date */}
                 {task.due_date && (
-                  <span className={`text-xs ${isOverdue ? 'text-red-400' : 'text-gray-400'}`}>
+                  <span className={`text-xs ${isOverdue ? 'text-red-400 font-bold' : 'text-gray-400'}`}>
+                    {isOverdue && '⚠️ '}
                     📅 {new Date(task.due_date).toLocaleDateString('de-DE', {
                       day: '2-digit',
                       month: 'short',
