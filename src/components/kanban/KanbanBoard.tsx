@@ -113,6 +113,25 @@ export function KanbanBoard() {
     }
   }
 
+  async function deleteBoard(boardId: string) {
+    if (!confirm('Board wirklich löschen? Alle Spalten und Tasks werden gelöscht.')) return
+    
+    try {
+      const res = await fetch(`/api/kanban/boards?id=${boardId}`, {
+        method: 'DELETE',
+      })
+      
+      if (res.ok) {
+        if (activeBoard?.id === boardId) {
+          setActiveBoard(null)
+        }
+        fetchBoards()
+      }
+    } catch (e) {
+      console.error('Failed to delete board:', e)
+    }
+  }
+
   async function createTask(columnId: string, title: string) {
     try {
       const res = await fetch('/api/kanban/tasks', {
@@ -242,17 +261,25 @@ export function KanbanBoard() {
         {boards.length > 0 && (
           <div className="flex items-center gap-2">
             {boards.map(board => (
-              <button
-                key={board.id}
-                onClick={() => setActiveBoard(board)}
-                className={`px-3 py-1 rounded text-sm ${
-                  activeBoard?.id === board.id 
-                    ? 'bg-highlight text-white' 
-                    : 'bg-secondary hover:bg-accent'
-                }`}
-              >
-                {board.name}
-              </button>
+              <div key={board.id} className="flex items-center gap-1">
+                <button
+                  onClick={() => setActiveBoard(board)}
+                  className={`px-3 py-1 rounded text-sm ${
+                    activeBoard?.id === board.id 
+                      ? 'bg-highlight text-white' 
+                      : 'bg-secondary hover:bg-accent'
+                  }`}
+                >
+                  {board.name}
+                </button>
+                <button
+                  onClick={() => deleteBoard(board.id)}
+                  className="px-2 py-1 text-xs text-red-400 hover:bg-red-900/50 rounded"
+                  title="Board löschen"
+                >
+                  ×
+                </button>
+              </div>
             ))}
           </div>
         )}
