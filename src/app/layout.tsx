@@ -22,6 +22,8 @@ export default function RootLayout({
               <a href="/" className="block px-4 py-2 rounded hover:bg-accent">Dashboard</a>
               <a href="/sessions" className="block px-4 py-2 rounded hover:bg-accent">Sessions</a>
               <a href="/agents" className="block px-4 py-2 rounded hover:bg-accent">Agents</a>
+              <a href="/tokens" className="block px-4 py-2 rounded hover:bg-accent">Tokens</a>
+              <a href="/kanban" className="block px-4 py-2 rounded hover:bg-accent font-medium">📋 Kanban</a>
               <a href="/cron" className="block px-4 py-2 rounded hover:bg-accent">Cron</a>
               <a href="/memory" className="block px-4 py-2 rounded hover:bg-accent">Memory</a>
             </nav>
