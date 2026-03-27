@@ -17,6 +17,8 @@ interface Task {
   labels: string
   assignee: string | null
   due_date: string | null
+  subtask_count?: number
+  subtask_done?: number
 }
 
 interface Column {

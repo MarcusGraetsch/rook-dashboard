@@ -13,7 +13,14 @@ export async function GET() {
     
     const boards = db.prepare('SELECT * FROM boards ORDER BY created_at DESC').all() as Board[];
     const columns = db.prepare('SELECT * FROM columns ORDER BY position').all() as Column[];
-    const tasks = db.prepare('SELECT * FROM tasks ORDER BY position').all() as Task[];
+    // Include subtask counts for token-efficient card display
+    const tasks = db.prepare(`
+      SELECT t.*,
+        (SELECT COUNT(*) FROM subtasks WHERE task_id = t.id) as subtask_count,
+        (SELECT COUNT(*) FROM subtasks WHERE task_id = t.id AND completed = 1) as subtask_done
+      FROM tasks t
+      ORDER BY t.position
+    `).all() as any[];
     
     // Group by board
     const result = boards.map((board: Board) => ({
@@ -22,7 +29,21 @@ export async function GET() {
         .filter((col: Column) => col.board_id === board.id)
         .map((col: Column) => ({
           ...col,
-          tasks: tasks.filter((task: Task) => task.column_id === col.id)
+          tasks: tasks.filter((task: any) => task.column_id === col.id).map((task: any) => ({
+            id: task.id,
+            column_id: task.column_id,
+            title: task.title,
+            description: task.description,
+            position: task.position,
+            priority: task.priority,
+            labels: task.labels,
+            assignee: task.assignee,
+            due_date: task.due_date,
+            created_at: task.created_at,
+            updated_at: task.updated_at,
+            subtask_count: task.subtask_count || 0,
+            subtask_done: task.subtask_done || 0,
+          }))
         }))
     }));
     

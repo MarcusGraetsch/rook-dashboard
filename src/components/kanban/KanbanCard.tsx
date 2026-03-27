@@ -16,6 +16,8 @@ interface Task {
   labels: string
   assignee: string | null
   due_date: string | null
+  subtask_count?: number
+  subtask_done?: number
 }
 
 interface Props {
@@ -153,6 +155,17 @@ export function KanbanCard({ task, isDragging, onUpdate, onDelete }: Props) {
                 {task.assignee && (
                   <span className="text-xs bg-accent px-1.5 py-0.5 rounded">
                     {ASSIGNEE_NAMES[task.assignee] || task.assignee}
+                  </span>
+                )}
+                
+                {/* Subtask Progress */}
+                {task.subtask_count !== undefined && task.subtask_count > 0 && (
+                  <span className={`text-xs px-1.5 py-0.5 rounded flex items-center gap-1 ${
+                    task.subtask_done === task.subtask_count 
+                      ? 'bg-green-900/50 text-green-400' 
+                      : 'bg-accent text-gray-400'
+                  }`}>
+                    ☑ {task.subtask_done}/{task.subtask_count}
                   </span>
                 )}
               </div>

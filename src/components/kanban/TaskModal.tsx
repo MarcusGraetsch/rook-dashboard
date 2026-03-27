@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 import { format, addDays, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday, isBefore, startOfDay } from 'date-fns'
 import { de } from 'date-fns/locale'
+import { SubTaskList } from './SubTaskList'
 
 interface Task {
   id: string
@@ -304,6 +305,11 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete }: Props) {
                 ))}
               </div>
             )}
+          </div>
+          
+          {/* SubTasks */}
+          <div className="pt-4 border-t border-gray-700">
+            <SubTaskList taskId={task?.id || null} isOpen={isOpen} />
           </div>
         </div>
         

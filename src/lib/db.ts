@@ -50,6 +50,16 @@ function initSchema() {
       updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (column_id) REFERENCES columns(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS subtasks (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      completed INTEGER DEFAULT 0,
+      position INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    );
   `);
 }
 
@@ -82,4 +92,13 @@ export interface Task {
   due_date: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface SubTask {
+  id: string;
+  task_id: string;
+  title: string;
+  completed: number; // 0 or 1 for SQLite
+  position: number;
+  created_at: string;
 }
