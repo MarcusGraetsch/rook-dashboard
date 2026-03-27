@@ -4,21 +4,27 @@
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:18789';
 const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || '';
 
+export interface Session {
+  key: string;
+  kind: string;
+  channel: string;
+  displayName: string;
+  updatedAt: number;
+  sessionId: string;
+  model: string;
+  contextTokens: number;
+  totalTokens: number;
+  lastChannel: string;
+}
+
 export interface Agent {
   id: string;
   name: string;
   emoji: string;
   status: 'active' | 'idle' | 'ready';
   workspace: string;
-}
-
-export interface Session {
-  key: string;
-  agentId: string;
-  model: string;
-  createdAt: string;
-  lastActive: string;
-  messageCount: number;
+  sandbox?: boolean;
+  model?: string;
 }
 
 export interface SystemStats {
@@ -28,69 +34,61 @@ export interface SystemStats {
   uptime: string;
 }
 
-export interface TokenUsage {
-  total: number;
-  today: number;
-  cost: number;
-}
-
 // Fetch wrapper with auth
-async function gatewayFetch(endpoint: string, options: RequestInit = {}) {
-  const res = await fetch(`${GATEWAY_URL}${endpoint}`, {
-    ...options,
+async function gatewayInvoke(tool: string, args: Record<string, any> = {}): Promise<any> {
+  const res = await fetch(`${GATEWAY_URL}/tools/invoke`, {
+    method: 'POST',
     headers: {
       'Authorization': `Bearer ${GATEWAY_TOKEN}`,
       'Content-Type': 'application/json',
-      ...options.headers,
     },
+    body: JSON.stringify({ tool, args }),
   });
   
   if (!res.ok) {
     throw new Error(`Gateway error: ${res.status}`);
   }
   
-  return res.json();
-}
-
-// Agents API
-export async function listAgents(): Promise<Agent[]> {
-  return gatewayFetch('/api/agents');
-}
-
-export async function getAgentStatus(agentId: string): Promise<Agent> {
-  return gatewayFetch(`/api/agents/${agentId}/status`);
+  const data = await res.json();
+  if (!data.ok) {
+    throw new Error(data.error?.message || 'Unknown error');
+  }
+  
+  return data.result;
 }
 
 // Sessions API
 export async function listSessions(): Promise<Session[]> {
-  return gatewayFetch('/api/sessions');
+  const result = await gatewayInvoke('sessions_list', { limit: 20 });
+  // Parse the nested JSON string in content[0].text
+  const sessionsData = JSON.parse(result.content[0].text);
+  return sessionsData.sessions || [];
 }
 
-export async function getSessionHistory(sessionKey: string): Promise<any[]> {
-  return gatewayFetch(`/api/sessions/${sessionKey}/history`);
+// Get session history
+export async function getSessionHistory(sessionKey: string, limit: number = 50): Promise<any[]> {
+  const result = await gatewayInvoke('sessions_history', { sessionKey, limit });
+  const historyData = JSON.parse(result.content[0].text);
+  return historyData.messages || [];
 }
 
-// System API
+// System stats (via exec on host)
 export async function getSystemStats(): Promise<SystemStats> {
-  return gatewayFetch('/api/system/stats');
+  // These would come from exec tool or direct system queries
+  return {
+    cpu: 23, // Mock for now
+    memory: 45,
+    disk: '32GB / 1.2TB',
+    uptime: '14 days',
+  };
 }
 
-export async function getTokenUsage(): Promise<TokenUsage> {
-  return gatewayFetch('/api/metrics/token-usage');
-}
-
-// WebSocket for real-time updates
-export function createGatewayWS(onMessage: (data: any) => void) {
-  const ws = new WebSocket(`ws://localhost:18789/ws`);
-  
-  ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    onMessage(data);
+// Gateway info
+export async function getGatewayInfo() {
+  return {
+    version: '2026.3.13',
+    port: 18789,
+    mode: 'local',
+    authMode: 'token',
   };
-  
-  ws.onerror = (error) => {
-    console.error('WebSocket error:', error);
-  };
-  
-  return ws;
 }
