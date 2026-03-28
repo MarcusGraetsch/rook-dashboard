@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { TrendingUp, Coins, Calendar, Clock, AlertCircle, DollarSign } from 'lucide-react'
+import { TrendingUp, Coins, Calendar, Clock, AlertCircle, DollarSign, Info } from 'lucide-react'
 import { BarChart } from '@/components/charts/BarChart'
+import { getModelPricingInfo, calculateCost } from '@/lib/pricing'
 
 interface TokenData {
   summary: {
@@ -25,30 +26,37 @@ interface ChartData {
   total: number;
 }
 
+interface Session {
+  key: string;
+  displayName: string;
+  model: string;
+  totalTokens: number;
+  contextTokens: number;
+  updatedAt: number;
+}
+
 export default function TokensPage() {
   const [data, setData] = useState<TokenData | null>(null)
   const [chartData, setChartData] = useState<ChartData | null>(null)
+  const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
-  const [dailyBudget, setDailyBudget] = useState<string>('')
-  const [budgetAlert, setBudgetAlert] = useState<number>(100000) // Default 100k tokens
+  const [dailyBudget, setDailyBudget] = useState<number>(100000)
+  const [budgetAlert, setBudgetAlert] = useState<number>(100000)
+  const [showPricingInfo, setShowPricingInfo] = useState<string | null>(null)
 
   useEffect(() => {
     async function fetchTokens() {
       try {
-        const [tokensRes, historyRes] = await Promise.all([
+        const [tokensRes, historyRes, sessionsRes] = await Promise.all([
           fetch('/api/gateway/tokens'),
           fetch('/api/gateway/history'),
+          fetch('/api/gateway/sessions'),
         ])
         
         if (tokensRes.ok) {
           const tokenData = await tokensRes.json()
           setData(tokenData)
-          
-          // Check budget
-          if (tokenData.summary?.todayTokens > budgetAlert) {
-            // Could trigger notification here
-          }
         } else {
           setError(true)
         }
@@ -56,6 +64,11 @@ export default function TokensPage() {
         if (historyRes.ok) {
           const history = await historyRes.json()
           setChartData(history)
+        }
+        
+        if (sessionsRes.ok) {
+          const sessData = await sessionsRes.json()
+          setSessions(sessData.sessions || [])
         }
       } catch (e) {
         setError(true)
@@ -65,7 +78,7 @@ export default function TokensPage() {
     }
     
     fetchTokens()
-    const interval = setInterval(fetchTokens, 60000) // Every minute
+    const interval = setInterval(fetchTokens, 60000)
     return () => clearInterval(interval)
   }, [budgetAlert])
 
@@ -85,10 +98,36 @@ export default function TokensPage() {
     )
   }
 
-  const { summary, sessions } = data
+  const { summary, sessions: summarySessions } = data
   const todayTokens = summary.todayTokens || 0
   const budgetPercent = Math.min((todayTokens / budgetAlert) * 100, 100)
   const isOverBudget = todayTokens > budgetAlert
+
+  // Calculate actual vs pay-per-use cost for our sessions
+  const costAnalysis = sessions.reduce((acc, session) => {
+    const modelId = session.model || 'unknown'
+    const cost = calculateCost(modelId, session.contextTokens || 0, session.totalTokens - (session.contextTokens || 0))
+    
+    if (!acc[modelId]) {
+      acc[modelId] = {
+        modelId,
+        displayName: getModelPricingInfo(modelId)?.displayName || modelId,
+        provider: getModelPricingInfo(modelId)?.provider || 'Unknown',
+        actualCost: 0,
+        payPerUseCost: 0,
+        tokens: 0
+      }
+    }
+    
+    acc[modelId].actualCost += cost.actualCost
+    acc[modelId].payPerUseCost += cost.payPerUseCost
+    acc[modelId].tokens += session.totalTokens
+    
+    return acc
+  }, {} as Record<string, { modelId: string; displayName: string; provider: string; actualCost: number; payPerUseCost: number; tokens: number }>)
+
+  const totalActualCost = Object.values(costAnalysis).reduce((sum, m) => sum + m.actualCost, 0)
+  const totalPayPerUseCost = Object.values(costAnalysis).reduce((sum, m) => sum + m.payPerUseCost, 0)
 
   return (
     <div className="space-y-6">
@@ -101,7 +140,11 @@ export default function TokensPage() {
           <input
             type="number"
             value={dailyBudget || budgetAlert}
-            onChange={(e) => setDailyBudget(e.target.value)}
+            onChange={(e) => {
+              const val = parseInt(e.target.value) || 0
+              setDailyBudget(val)
+              setBudgetAlert(val)
+            }}
             placeholder="Budget..."
             className="w-32 px-3 py-1.5 bg-secondary border border-gray-700 rounded text-white text-sm"
           />
@@ -166,31 +209,116 @@ export default function TokensPage() {
           <div className="flex items-center gap-3">
             <DollarSign className="text-highlight" />
             <div>
-              <p className="text-sm text-gray-400">Kosten (heute)</p>
-              <p className="text-2xl font-bold">${summary.estimatedCostToday}</p>
+              <p className="text-sm text-gray-400">Kosten (geschätzt)</p>
+              <p className="text-2xl font-bold">${totalActualCost.toFixed(4)}</p>
             </div>
           </div>
         </div>
       </div>
       
-      {/* 7-Day Chart */}
-      {chartData && chartData.days.length > 0 && (
+      {/* Cost Comparison */}
+      <div className="grid grid-cols-2 gap-6">
+        {/* 7-Day Chart */}
+        {chartData && chartData.days.length > 0 && (
+          <div className="bg-secondary p-6 rounded-lg border border-gray-700">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold">Token-Verbrauch (7 Tage)</h3>
+              <span className="text-sm text-gray-400">
+                Gesamt: {chartData.total.toLocaleString()}
+              </span>
+            </div>
+            <BarChart data={chartData.days} maxValue={chartData.maxTokens} height={150} />
+          </div>
+        )}
+        
+        {/* Model Cost Breakdown */}
         <div className="bg-secondary p-6 rounded-lg border border-gray-700">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold">Token-Verbrauch (7 Tage)</h3>
-            <span className="text-sm text-gray-400">
-              Gesamt: {chartData.total.toLocaleString()}
-            </span>
+            <h3 className="font-bold">Kosten nach Model</h3>
           </div>
-          <BarChart data={chartData.days} maxValue={chartData.maxTokens} height={150} />
+          
+          {Object.values(costAnalysis).length === 0 ? (
+            <p className="text-gray-400 text-sm">Keine Model-Daten verfügbar</p>
+          ) : (
+            <div className="space-y-3">
+              {Object.values(costAnalysis).map((model) => (
+                <div 
+                  key={model.modelId}
+                  className="p-3 bg-accent/30 rounded-lg relative"
+                  onMouseEnter={() => setShowPricingInfo(model.modelId)}
+                  onMouseLeave={() => setShowPricingInfo(null)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{model.displayName}</span>
+                      <span className="text-xs text-gray-500">{model.provider}</span>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-mono text-highlight">${model.actualCost.toFixed(4)}</p>
+                      {model.actualCost < model.payPerUseCost && (
+                        <p className="text-xs text-green-400">
+                          (API: ${model.payPerUseCost.toFixed(4)})
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Tooltip with pricing info */}
+                  {showPricingInfo === model.modelId && (
+                    <div className="absolute left-full top-0 ml-2 w-64 p-3 bg-secondary border border-gray-600 rounded-lg shadow-xl z-50">
+                      <p className="font-medium mb-2">{model.displayName}</p>
+                      <div className="text-sm space-y-1">
+                        <p><span className="text-gray-400">Tokens:</span> {model.tokens.toLocaleString()}</p>
+                        {(() => {
+                          const info = getModelPricingInfo(model.modelId)
+                          return info ? (
+                            <>
+                              <p><span className="text-gray-400">Input:</span> {info.inputDisplay}</p>
+                              <p><span className="text-gray-400">Output:</span> {info.outputDisplay}</p>
+                              {info.subscriptionDisplay && (
+                                <p><span className="text-gray-400">Sub:</span> {info.subscriptionDisplay}</p>
+                              )}
+                              {info.notes && (
+                                <p className="text-xs text-gray-500 mt-1">{info.notes}</p>
+                              )}
+                            </>
+                          ) : null
+                        })()}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+              
+              {/* Summary */}
+              <div className="pt-3 border-t border-gray-700">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400">Gesamt (tatsächlich):</span>
+                  <span className="font-bold text-highlight">${totalActualCost.toFixed(4)}</span>
+                </div>
+                {totalPayPerUseCost > totalActualCost && (
+                  <div className="flex justify-between items-center mt-1">
+                    <span className="text-gray-400">Wenn API (pay-per-use):</span>
+                    <span className="text-green-400">${totalPayPerUseCost.toFixed(4)}</span>
+                  </div>
+                )}
+                {totalPayPerUseCost > totalActualCost && (
+                  <p className="text-xs text-green-400 mt-2">
+                    ✓ Du sparst ${(totalPayPerUseCost - totalActualCost).toFixed(4)} durch Subscription/niedrigere API-Preise
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
       
       {/* Note */}
       <div className="bg-accent/50 p-4 rounded-lg border border-gray-600">
         <p className="text-sm text-gray-300">
-          💡 Token-Zahlen basieren auf Session-Daten. MiniMax M2.7: $0.30/1M input, $1.20/1M output (geschätzt).
-          Setze ein Tagesbudget um Alerts zu erhalten.
+          💡 <strong>Hinweis:</strong> Preise basieren auf bekannten API-Preisen. 
+          Subscription-Modelle zeigen tatsächliche Kosten. Hover über ein Model für Details.
+          {Object.keys(costAnalysis).length === 0 && ' Keine Model-Daten verfügbar.'}
         </p>
       </div>
       
@@ -202,23 +330,46 @@ export default function TokensPage() {
         <table className="w-full">
           <thead>
             <tr className="text-left text-sm text-gray-400 border-b border-gray-700">
-              <th className="px-4 py-2">Session</th>
+              <th className="px-4 py-2">Model</th>
               <th className="px-4 py-2">Tokens</th>
+              <th className="px-4 py-2">Kosten (geschätzt)</th>
               <th className="px-4 py-2">Letzte Aktivität</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-700">
-            {sessions.slice(0, 10).map((session, idx) => (
-              <tr key={idx} className="hover:bg-accent/30">
-                <td className="px-4 py-2 font-mono text-sm">{session.name}</td>
-                <td className="px-4 py-2">
-                  <span className="text-highlight font-mono">{session.tokens.toLocaleString()}</span>
-                </td>
-                <td className="px-4 py-2 text-gray-400 text-sm">
-                  {new Date(session.updatedAt).toLocaleString('de-DE')}
-                </td>
-              </tr>
-            ))}
+            {sessions.slice(0, 10).map((session, idx) => {
+              const cost = calculateCost(
+                session.model,
+                session.contextTokens || 0,
+                session.totalTokens - (session.contextTokens || 0)
+              )
+              return (
+                <tr key={idx} className="hover:bg-accent/30">
+                  <td className="px-4 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm">{session.model}</span>
+                      <button
+                        onMouseEnter={() => setShowPricingInfo(session.model)}
+                        onMouseLeave={() => setShowPricingInfo(null)}
+                        className="p-1 hover:bg-accent rounded"
+                      >
+                        <Info className="w-3 h-3 text-gray-500" />
+                      </button>
+                    </div>
+                  </td>
+                  <td className="px-4 py-2">
+                    <span className="font-mono">{session.totalTokens.toLocaleString()}</span>
+                    <span className="text-xs text-gray-500 ml-1">({session.contextTokens?.toLocaleString() || 0} ctx)</span>
+                  </td>
+                  <td className="px-4 py-2">
+                    <span className="text-highlight font-mono">${cost.actualCost.toFixed(6)}</span>
+                  </td>
+                  <td className="px-4 py-2 text-gray-400 text-sm">
+                    {new Date(session.updatedAt).toLocaleString('de-DE')}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
