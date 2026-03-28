@@ -24,8 +24,13 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     provider: 'MiniMax',
     inputPerMillion: 0.30, // ~$0.30/1M input
     outputPerMillion: 1.20, // ~$1.20/1M output
+    subscription: {
+      price: 20, // MiniMax Coding Pro
+      includedTokens: 50000000, // 50M tokens included (geschätzt)
+      pricePerExtraMillion: 0
+    },
     contextWindow: 1000000,
-    notes: 'MiniMax API - Pay per use'
+    notes: 'Subscription: MiniMax Coding Pro ($20/mo)'
   },
   'kimi-coding/k2p5': {
     id: 'kimi-coding/k2p5',
@@ -33,8 +38,13 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     provider: 'Moonshot',
     inputPerMillion: 0.60, // ~$0.60/1M input
     outputPerMillion: 2.00, // ~$2.00/1M output  
+    subscription: {
+      price: 19, // Kimi Pro (~$19/mo)
+      includedTokens: 10000000, // 10M tokens (geschätzt)
+      pricePerExtraMillion: 0
+    },
     contextWindow: 128000,
-    notes: 'Moonshot API - Pay per use'
+    notes: 'Subscription: Kimi Pro (~$19/mo)'
   },
   'minimax-portal/MiniMax-M2': {
     id: 'minimax-portal/MiniMax-M2',
@@ -42,8 +52,13 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     provider: 'MiniMax',
     inputPerMillion: 0.30,
     outputPerMillion: 1.20,
+    subscription: {
+      price: 20, // MiniMax Coding Pro
+      includedTokens: 50000000,
+      pricePerExtraMillion: 0
+    },
     contextWindow: 1000000,
-    notes: 'MiniMax API via Portal'
+    notes: 'Subscription: MiniMax Coding Pro ($20/mo)'
   },
   'gpt-4': {
     id: 'gpt-4',
