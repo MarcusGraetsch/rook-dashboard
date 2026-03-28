@@ -75,15 +75,17 @@ export const MODEL_ECOLOGY: Record<string, EcologicalMetrics> = {
 }
 
 // Social/labor metrics per provider
-// Based on public reports, worker accounts, and research
+// Based on public reports, worker accounts, research, and Marcus's sources
 export const MODEL_SOCIAL: Record<string, SocialMetrics> = {
   'MiniMax-M2.7': {
     modelId: 'MiniMax-M2.7',
     provider: 'MiniMax (China)',
-    laborRating: 'C', // Limited public data on labor practices
-    dataEthics: 'C', // Some concerns about data sourcing
-    colonialismIndex: 6, // Data center profits often leave origin countries
-    clickworkerNotes: 'Limited transparency on annotation workforce. Most data centers in China with local labor.',
+    laborRating: 'C',
+    dataEthics: 'C',
+    colonialismIndex: 6,
+    clickworkerNotes: `Hardware-Produktion stark in China. Konfliktmineralien (3TG, Kobalt) oft aus Afrika. 
+Quellen: Responsible Minerals Initiative (RMI), Z2Data für Supply-Chain zu Konfliktzonen.
+Exportbeschränkungen (Gallium, Germanium) zeigen geopolitische Risiken. (WEF)`,
   },
   'kimi-coding/k2p5': {
     modelId: 'kimi-coding/k2p5',
@@ -91,23 +93,30 @@ export const MODEL_SOCIAL: Record<string, SocialMetrics> = {
     laborRating: 'C',
     dataEthics: 'C',
     colonialismIndex: 6,
-    clickworkerNotes: 'Similar to MiniMax. Less public information available.',
+    clickworkerNotes: `Ähnliche Bedenken wie MiniMax. Wenig öffentliche Daten zu Arbeitspraktiken.
+Hardware-Lieferkette ähnlich problematisch wie bei anderen China-Providern.
+Quellen: RMI, Fairphone Reports zu Konfliktmineralien in IT-Lieferketten.`,
   },
   'gpt-4': {
     modelId: 'gpt-4',
     provider: 'OpenAI (USA)',
-    laborRating: 'B', // Better documented but concerns about Clickworker/MSCash rates
-    dataEthics: 'C', // Training data concerns
-    colonialismIndex: 7, // Significant value extraction from global data
-    clickworkerNotes: 'Uses Scale AI and other clickwork platforms. Rates as low as $1-2/hour reported. Training data largely from Western internet.',
+    laborRating: 'C',
+    dataEthics: 'C',
+    colonialismIndex: 7,
+    clickworkerNotes: `Scale AI und Clickworker-Plattformen mit niedrigen Löhnen ($1-2/h).
+Trainingsdaten oft aus westlichen Quellen, Extraktion von globalem Wissen.
+Rechenzentren im Nahen Osten Ziel von Konflikten (Data Centre Magazine).
+Quellen: DC Byte, TechPolicy.Press zu KI-Infrastruktur im Krieg.`,
   },
   'claude-3-5-sonnet': {
     modelId: 'claude-3-5-sonnet',
     provider: 'Anthropic (USA)',
-    laborRating: 'B+', // Better practices, PII protection documented
-    dataEthics: 'B', // More careful about data sourcing
-    colonialismIndex: 5, // Still extractive but more thoughtful
-    clickworkerNotes: 'Uses proprietary annotation workforce with better conditions documented. Less reliance on clickwork platforms.',
+    laborRating: 'B',
+    dataEthics: 'B',
+    colonialismIndex: 5,
+    clickworkerNotes: `Besser dokumentierte Praktiken als OpenAI. Eigene Annotations-Teams.
+Dennoch hardware-abhängig von Nvidia GPUs mit ähnlichen Supply-Chain-Risiken.
+Lieferketten-Problematik (Germanium, Gallium Exportbeschränkungen China) betrifft alle.`,
   },
 }
 

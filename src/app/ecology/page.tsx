@@ -238,6 +238,78 @@ export default function EcologyPage() {
         </div>
       </div>
       
+      {/* Sources */}
+      <div className="bg-secondary p-6 rounded-lg border border-gray-700">
+        <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+          <Globe className="w-5 h-5 text-blue-500" />
+          Quellen & Referenzen
+        </h3>
+        
+        <div className="grid grid-cols-2 gap-6 text-sm">
+          <div>
+            <h4 className="font-medium mb-2 text-amber-400">Konfliktmineralien & Hardware</h4>
+            <ul className="space-y-2 text-gray-300">
+              <li>
+                <a href="https://www.responsiblemineralsinitiative.org" className="text-blue-400 hover:underline" target="_blank" rel="noopener">
+                  Responsible Minerals Initiative (RMI)
+                </a>
+                <p className="text-xs text-gray-500">Tracking von 3TG (Tantal, Zinn, Wolfram, Gold) in Elektronik-Lieferketten</p>
+              </li>
+              <li>
+                <a href="https://www.fairphone.com" className="text-blue-400 hover:underline" target="_blank" rel="noopener">
+                  Fairphone — Fair Materials Sourcing
+                </a>
+                <p className="text-xs text-gray-500">Transparente Lieferketten für Kobalt, Kupfer in IT-Hardware</p>
+              </li>
+              <li>
+                <a href="https://www.z2data.com" className="text-blue-400 hover:underline" target="_blank" rel="noopener">
+                  Z2Data — Conflict Minerals Insights
+                </a>
+                <p className="text-xs text-gray-500">Smelters & Refiners zu Konfliktzonen tracken</p>
+              </li>
+              <li>
+                <a href="https://www.giz.de" className="text-blue-400 hover:underline" target="_blank" rel="noopener">
+                  GIZ — Konfliktfreie Rohstoffe
+                </a>
+                <p className="text-xs text-gray-500">Great-Lakes-Gebiet Afrika, bewaffnete Konflikte durch Rohstoffabbau</p>
+              </li>
+            </ul>
+          </div>
+          
+          <div>
+            <h4 className="font-medium mb-2 text-amber-400">Geopolitik & Rechenzentren</h4>
+            <ul className="space-y-2 text-gray-300">
+              <li>
+                <a href="https://www.datacentremagazine.com" className="text-blue-400 hover:underline" target="_blank" rel="noopener">
+                  Data Centre Magazine / DC Byte
+                </a>
+                <p className="text-xs text-gray-500">Verwundbarkeit von Rechenzentren im Nahen Osten, Angriffe auf AWS</p>
+              </li>
+              <li>
+                <a href="https://techpolicy.press" className="text-blue-400 hover:underline" target="_blank" rel="noopener">
+                  TechPolicy.Press
+                </a>
+                <p className="text-xs text-gray-500">Drohnenangriffe auf KI-Infrastruktur, Hyperscaler im Krieg</p>
+              </li>
+              <li>
+                <a href="https://www.weforum.org" className="text-blue-400 hover:underline" target="_blank" rel="noopener">
+                  World Economic Forum (WEF)
+                </a>
+                <p className="text-xs text-gray-500">Gallium, Germanium Exportbeschränkungen, kritische Rohstoffe</p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        
+        <div className="mt-4 p-3 bg-blue-900/30 rounded border border-blue-700/50">
+          <p className="text-sm text-blue-200">
+            <strong>Zusammenhang:</strong> Die KI-Infrastruktur ist mit Konfliktzonen verbunden — 
+            von Konfliktmineralien (RMI, Z2Data) über geopolitische Risiken für Rechenzentren 
+            (DC Byte, TechPolicy.Press) bis zu Exportbeschränkungen kritischer Rohstoffe (WEF, GIZ).
+          </p>
+        </div>
+      </div>
+      
       {/* Social Impact Explanation */}
       <div className="bg-secondary p-6 rounded-lg border border-gray-700">
         <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
