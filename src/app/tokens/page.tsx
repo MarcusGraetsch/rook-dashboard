@@ -265,18 +265,23 @@ export default function TokensPage() {
                   
                   {/* Tooltip with pricing info */}
                   {showPricingInfo === model.modelId && (
-                    <div className="absolute left-full top-0 ml-2 w-64 p-3 bg-secondary border border-gray-600 rounded-lg shadow-xl z-50">
+                    <div className="absolute left-full top-0 ml-2 w-72 p-3 bg-secondary border border-gray-600 rounded-lg shadow-xl z-50">
                       <p className="font-medium mb-2">{model.displayName}</p>
                       <div className="text-sm space-y-1">
-                        <p><span className="text-gray-400">Tokens:</span> {model.tokens.toLocaleString()}</p>
+                        <p><span className="text-gray-400">Tokens (Session):</span> {model.tokens.toLocaleString()}</p>
                         {(() => {
                           const info = getModelPricingInfo(model.modelId)
                           return info ? (
                             <>
-                              <p><span className="text-gray-400">Input:</span> {info.inputDisplay}</p>
-                              <p><span className="text-gray-400">Output:</span> {info.outputDisplay}</p>
+                              <p><span className="text-gray-400">API Input:</span> {info.inputDisplay}</p>
+                              <p><span className="text-gray-400">API Output:</span> {info.outputDisplay}</p>
                               {info.subscriptionDisplay && (
-                                <p><span className="text-gray-400">Sub:</span> {info.subscriptionDisplay}</p>
+                                <>
+                                  <p><span className="text-gray-400">Subscription:</span> {info.subscriptionDisplay}</p>
+                                  {info.limitDisplay && (
+                                    <p><span className="text-gray-400">Limit:</span> {info.limitDisplay}</p>
+                                  )}
+                                </>
                               )}
                               {info.notes && (
                                 <p className="text-xs text-gray-500 mt-1">{info.notes}</p>

@@ -10,8 +10,11 @@ export interface ModelPricing {
   outputPerMillion: number // Pay-per-use price per 1M output tokens (USD)
   subscription?: {
     priceEur: number // Monthly price in EUR
-    includedTokens: number // Included tokens (0 = unlimited)
+    includedTokens: number // Included tokens (0 = not applicable)
     unlimitedAfter: boolean // True if unlimited after limit
+    limitType?: 'requests' | 'messages' | 'tokens' | 'unknown'
+    limitValue?: number // Limit amount
+    limitPeriod?: string // e.g., "per 3h", "per day"
   }
   contextWindow: number
   notes?: string
@@ -26,12 +29,15 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     inputPerMillion: 0.30, // USD per 1M input tokens
     outputPerMillion: 1.20, // USD per 1M output tokens
     subscription: {
-      priceEur: 10.31, // 10,31 €/Monat
-      includedTokens: 0, // Unlimited
-      unlimitedAfter: true
+      priceEur: 10.31, // 10,31 €/Monat (Starter Plan)
+      includedTokens: 0, // Request-basiert: ~1500 requests/5h
+      unlimitedAfter: false,
+      limitType: 'requests',
+      limitValue: 1500, // per 5 hours
+      limitPeriod: '5h'
     },
     contextWindow: 1000000,
-    notes: 'MiniMax Subscription (10,31 €/Monat, Unlimited)'
+    notes: 'MiniMax Starter: ~1500 Requests/5h (request-basiert)'
   },
   'kimi-coding/k2p5': {
     id: 'kimi-coding/k2p5',
@@ -41,11 +47,14 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     outputPerMillion: 2.00, // USD per 1M output tokens  
     subscription: {
       priceEur: 16.67, // 16,67 €/Monat
-      includedTokens: 0, // Unlimited
-      unlimitedAfter: true
+      includedTokens: 0, // Info nicht verfügbar
+      unlimitedAfter: false,
+      limitType: 'unknown',
+      limitValue: 0,
+      limitPeriod: 'unknown'
     },
     contextWindow: 128000,
-    notes: 'Kimi Subscription (16,67 €/Monat, Unlimited)'
+    notes: 'Kimi Pro: Token-Limit unbekannt (bitte recherchieren)'
   },
   'minimax-portal/MiniMax-M2': {
     id: 'minimax-portal/MiniMax-M2',
@@ -55,11 +64,14 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     outputPerMillion: 1.20,
     subscription: {
       priceEur: 10.31, // 10,31 €/Monat
-      includedTokens: 0, // Unlimited
-      unlimitedAfter: true
+      includedTokens: 0,
+      unlimitedAfter: false,
+      limitType: 'requests',
+      limitValue: 1500,
+      limitPeriod: '5h'
     },
     contextWindow: 1000000,
-    notes: 'MiniMax Subscription (10,31 €/Monat, Unlimited)'
+    notes: 'MiniMax Starter: ~1500 Requests/5h'
   },
   'MiniMax-M2': {
     id: 'MiniMax-M2',
@@ -70,10 +82,13 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     subscription: {
       priceEur: 10.31,
       includedTokens: 0,
-      unlimitedAfter: true
+      unlimitedAfter: false,
+      limitType: 'requests',
+      limitValue: 1500,
+      limitPeriod: '5h'
     },
     contextWindow: 1000000,
-    notes: 'MiniMax Subscription (10,31 €/Monat, Unlimited)'
+    notes: 'MiniMax Starter: ~1500 Requests/5h'
   },
   'kimi-k2p5': {
     id: 'kimi-k2p5',
@@ -84,24 +99,30 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     subscription: {
       priceEur: 16.67,
       includedTokens: 0,
-      unlimitedAfter: true
+      unlimitedAfter: false,
+      limitType: 'unknown',
+      limitValue: 0,
+      limitPeriod: 'unknown'
     },
     contextWindow: 128000,
-    notes: 'Kimi Subscription (16,67 €/Monat, Unlimited)'
+    notes: 'Kimi Pro: Token-Limit unbekannt'
   },
   'gpt-4': {
     id: 'gpt-4',
-    name: 'GPT-4',
+    name: 'GPT-4 (Plus)',
     provider: 'OpenAI',
     inputPerMillion: 15.00,
     outputPerMillion: 60.00,
     subscription: {
       priceEur: 23.00, // ChatGPT Plus
       includedTokens: 0,
-      unlimitedAfter: true
+      unlimitedAfter: false,
+      limitType: 'messages',
+      limitValue: 150, // per 3 hours (GPT-4o)
+      limitPeriod: '3h'
     },
     contextWindow: 128000,
-    notes: 'ChatGPT Plus (23,00 €/Monat, Unlimited)'
+    notes: 'ChatGPT Plus: ~150 Messages/3h (message-basiert)'
   },
   'gpt-4-turbo': {
     id: 'gpt-4-turbo',
@@ -212,6 +233,7 @@ export function getModelPricingInfo(modelId: string): {
   inputDisplay: string
   outputDisplay: string
   subscriptionDisplay: string | null
+  limitDisplay: string | null
   notes: string
 } | null {
   const model = MODEL_PRICING[modelId]
@@ -223,6 +245,7 @@ export function getModelPricingInfo(modelId: string): {
       inputDisplay: '?',
       outputDisplay: '?',
       subscriptionDisplay: null,
+      limitDisplay: null,
       notes: 'Preis nicht bekannt'
     }
   }
@@ -231,14 +254,20 @@ export function getModelPricingInfo(modelId: string): {
   const outputDisplay = `$${model.outputPerMillion}/1M out`
   
   let subscriptionDisplay: string | null = null
+  let limitDisplay: string | null = null
+  
   if (model.subscription) {
-    if (model.subscription.unlimitedAfter) {
-      subscriptionDisplay = `${model.subscription.priceEur} €/mo (Unlimited)`
-    } else {
-      const included = model.subscription.includedTokens >= 1_000_000 
-        ? `${model.subscription.includedTokens / 1_000_000}M`
-        : `${model.subscription.includedTokens / 1000}K`
-      subscriptionDisplay = `${model.subscription.priceEur} €/mo (${included} tokens)`
+    subscriptionDisplay = `${model.subscription.priceEur} €/Monat`
+    
+    if (model.subscription.limitType && model.subscription.limitValue) {
+      const limitTypeNames: Record<string, string> = {
+        'requests': 'Requests',
+        'messages': 'Messages',
+        'tokens': 'Tokens'
+      }
+      limitDisplay = `~${model.subscription.limitValue.toLocaleString()} ${limitTypeNames[model.subscription.limitType] || model.subscription.limitType}/${model.subscription.limitPeriod}`
+    } else if (model.subscription.unlimitedAfter) {
+      limitDisplay = 'Unlimited'
     }
   }
   
@@ -248,6 +277,7 @@ export function getModelPricingInfo(modelId: string): {
     inputDisplay,
     outputDisplay,
     subscriptionDisplay,
+    limitDisplay,
     notes: model.notes || ''
   }
 }
