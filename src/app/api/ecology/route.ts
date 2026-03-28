@@ -91,7 +91,7 @@ export async function GET() {
     }
 
     // Find closest description
-    function getCo2Description(g: number): string {
+    const getCo2Description = (g: number): string => {
       const keys = Object.keys(co2Descriptions).map(Number).sort((a, b) => a - b)
       for (const k of keys) {
         if (g <= k) return co2Descriptions[String(k)]

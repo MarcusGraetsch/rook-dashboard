@@ -1,8 +1,29 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Leaf, Zap, CloudRain, Factory, Globe, Users, ChevronDown } from 'lucide-react'
-import { getEcologicalInfo } from '@/lib/ecology'
+import { Leaf, Zap, CloudRain, Factory, Globe, Users, ChevronDown, Database, RefreshCw, AlertTriangle } from 'lucide-react'
+
+interface DbMetric {
+  id: string
+  source_id: string
+  category: string
+  metric_type: string
+  provider?: string
+  model_id?: string
+  value: number
+  value_unit: string
+  confidence: string
+  source_note?: string
+  fetched_at: string
+}
+
+interface SourceStatus {
+  id: string
+  name: string
+  url: string
+  fetch_status?: string
+  last_fetched?: string
+}
 
 interface ModelImpact {
   modelId: string
@@ -38,11 +59,59 @@ export default function EcologyPage() {
   const [summary, setSummary] = useState<Summary | null>(null)
   const [modelImpacts, setModelImpacts] = useState<ModelImpact[]>([])
   const [socialMetrics, setSocialMetrics] = useState<Record<string, SocialMetrics>>({})
+  const [dbMetrics, setDbMetrics] = useState<DbMetric[]>([])
+  const [sources, setSources] = useState<SourceStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [expandedModel, setExpandedModel] = useState<string | null>(null)
+  const [usingFallback, setUsingFallback] = useState(false)
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
 
+  // Fetch from metrics API
   useEffect(() => {
+    async function fetchMetrics() {
+      try {
+        // Try to fetch from metrics database
+        const res = await fetch('/api/metrics')
+        if (res.ok) {
+          const data = await res.json()
+          
+          if (data.status === 'fallback') {
+            // Metrics DB not available, use fallback
+            setUsingFallback(true)
+            setDbMetrics([
+              ...(data.fallback?.ecological || []),
+              ...(data.fallback?.social || []),
+              ...(data.fallback?.supply_chain || [])
+            ])
+          } else {
+            // Got data from metrics DB
+            setUsingFallback(false)
+            setDbMetrics([
+              ...(data.metrics?.ecological || []),
+              ...(data.metrics?.social || []),
+              ...(data.metrics?.supply_chain || [])
+            ])
+          }
+          
+          // Also get source status
+          const sourceRes = await fetch('/api/metrics?sources=true')
+          if (sourceRes.ok) {
+            const sourceData = await sourceRes.json()
+            setSources(sourceData.sources || [])
+          }
+        } else {
+          setError(true)
+        }
+      } catch (e) {
+        setError(true)
+      } finally {
+        setLoading(false)
+        setLastRefresh(new Date())
+      }
+    }
+    
+    // Also fetch session-based ecological data
     async function fetchEcology() {
       try {
         const res = await fetch('/api/ecology')
@@ -51,18 +120,16 @@ export default function EcologyPage() {
           setSummary(data.summary)
           setModelImpacts(data.byModel || [])
           setSocialMetrics(data.socialMetrics || {})
-        } else {
-          setError(true)
         }
       } catch (e) {
-        setError(true)
-      } finally {
-        setLoading(false)
+        // Non-critical, continue without
       }
     }
     
+    fetchMetrics()
     fetchEcology()
-    const interval = setInterval(fetchEcology, 60000)
+    
+    const interval = setInterval(fetchMetrics, 60000)
     return () => clearInterval(interval)
   }, [])
 
@@ -75,11 +142,20 @@ export default function EcologyPage() {
     'F': 'text-red-400',
   }
 
+  // Get metrics from database by type
+  function getDbMetric(category: string, metricType: string, provider?: string): DbMetric | undefined {
+    return dbMetrics.find(m => 
+      m.category === category && 
+      m.metric_type === metricType &&
+      (!provider || m.provider === provider)
+    )
+  }
+
   if (loading) {
     return <div className="flex items-center justify-center h-64"><p className="text-gray-400">Laden...</p></div>
   }
 
-  if (error || !summary) {
+  if (error) {
     return (
       <div className="bg-red-900/50 border border-red-500 p-4 rounded-lg">
         <p className="text-red-400">⚠️ Ökologische Daten nicht verfügbar</p>
@@ -89,16 +165,56 @@ export default function EcologyPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold flex items-center gap-2">
-        <Leaf className="w-8 h-8 text-green-500" />
-        Ökologischer Impact
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold flex items-center gap-2">
+          <Leaf className="w-8 h-8 text-green-500" />
+          Ökologischer Impact
+        </h2>
+        
+        <div className="flex items-center gap-2">
+          {usingFallback && (
+            <span className="flex items-center gap-1 text-xs text-amber-400 bg-amber-900/30 px-2 py-1 rounded">
+              <Database className="w-3 h-3" />
+              Demo-Daten
+            </span>
+          )}
+          {lastRefresh && (
+            <span className="text-xs text-gray-500">
+              <RefreshCw className="w-3 h-3 inline mr-1" />
+              {lastRefresh.toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+      </div>
+      
+      {/* Source Status */}
+      {sources.length > 0 && (
+        <div className="bg-secondary p-4 rounded-lg border border-gray-700">
+          <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+            <Database className="w-4 h-4 text-blue-400" />
+            Datenquellen
+          </h3>
+          <div className="grid grid-cols-4 gap-2">
+            {sources.map(source => (
+              <div key={source.id} className="flex items-center gap-2 text-xs">
+                <span className={`w-2 h-2 rounded-full ${
+                  source.fetch_status === 'success' ? 'bg-green-400' :
+                  source.fetch_status === 'failed' ? 'bg-red-400' :
+                  'bg-gray-400'
+                }`} />
+                <span className="text-gray-300">{source.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       
       {/* CO2 Warning Banner */}
       <div className="bg-gradient-to-r from-amber-900/50 to-orange-900/50 border border-amber-600/50 p-4 rounded-lg">
         <p className="text-amber-200">
-          <strong>Wichtig:</strong> Diese Zahlen sind Schätzungen basierend auf公开研究数据 (EcoLogits, UC Riverside).
-          Tatsächliche Werte variieren je nach Hardware, Rechenzentrum und Nutzungsmuster.
+          <strong>Wichtig:</strong> Diese Zahlen sind Schätzungen basierend auf öffentlichen Forschungsdaten 
+          (EcoLogits, UC Riverside, RMI). Tatsächliche Werte variieren je nach Hardware, 
+          Rechenzentrum und Nutzungsmuster.
         </p>
       </div>
       
@@ -109,7 +225,7 @@ export default function EcologyPage() {
             <Zap className="w-8 h-8 text-yellow-500" />
             <div>
               <p className="text-sm text-gray-400">Energie (gesammelt)</p>
-              <p className="text-2xl font-bold">{summary.totalEnergyKwh.toFixed(4)} kWh</p>
+              <p className="text-2xl font-bold">{summary?.totalEnergyKwh.toFixed(4) || '0'} kWh</p>
             </div>
           </div>
         </div>
@@ -119,7 +235,7 @@ export default function EcologyPage() {
             <CloudRain className="w-8 h-8 text-blue-500" />
             <div>
               <p className="text-sm text-gray-400">Wasser</p>
-              <p className="text-2xl font-bold">{(summary.totalWaterMl / 1000).toFixed(2)} L</p>
+              <p className="text-2xl font-bold">{((summary?.totalWaterMl || 0) / 1000).toFixed(2)} L</p>
             </div>
           </div>
         </div>
@@ -129,7 +245,7 @@ export default function EcologyPage() {
             <Factory className="w-8 h-8 text-gray-500" />
             <div>
               <p className="text-sm text-gray-400">CO₂ (Hardware)</p>
-              <p className="text-2xl font-bold">{summary.totalHardwareCo2G.toFixed(1)} g</p>
+              <p className="text-2xl font-bold">{summary?.totalHardwareCo2G.toFixed(1) || '0'} g</p>
             </div>
           </div>
         </div>
@@ -139,104 +255,153 @@ export default function EcologyPage() {
             <Globe className="w-8 h-8 text-green-500" />
             <div>
               <p className="text-sm text-gray-400">CO₂ (Gesamt)</p>
-              <p className="text-2xl font-bold">{summary.totalCo2AllG.toFixed(1)} g</p>
-              <p className="text-xs text-gray-500">{summary.co2EquivalentDescription}</p>
+              <p className="text-2xl font-bold">{summary?.totalCo2AllG.toFixed(1) || '0'} g</p>
+              <p className="text-xs text-gray-500">{summary?.co2EquivalentDescription}</p>
             </div>
           </div>
         </div>
       </div>
       
-      {/* Model Breakdown */}
-      <div className="bg-secondary p-6 rounded-lg border border-gray-700">
-        <h3 className="text-lg font-bold mb-4">Impact nach Model</h3>
-        
-        <div className="space-y-3">
-          {modelImpacts.map((impact) => {
-            const info = getEcologicalInfo(impact.modelId)
-            const social = socialMetrics[impact.modelId]
-            const isExpanded = expandedModel === impact.modelId
-            
-            return (
-              <div key={impact.modelId} className="bg-accent/30 rounded-lg overflow-hidden">
-                <div 
-                  className="p-4 cursor-pointer hover:bg-accent/50 transition-colors"
-                  onClick={() => setExpandedModel(isExpanded ? null : impact.modelId)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                      <div>
-                        <p className="font-medium">{impact.modelId}</p>
-                        <p className="text-xs text-gray-400">{impact.sessions} Sessions • {impact.totalTokens.toLocaleString()} Tokens</p>
-                      </div>
+      {/* Live Metrics from Database */}
+      {dbMetrics.length > 0 && (
+        <div className="bg-secondary p-6 rounded-lg border border-gray-700">
+          <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+            <Database className="w-5 h-5 text-blue-400" />
+            Live Metrics aus Datenbank
+          </h3>
+          
+          {/* Ecological Metrics */}
+          {dbMetrics.filter(m => m.category === 'ecological').length > 0 && (
+            <div className="mb-4">
+              <h4 className="text-sm font-medium text-green-400 mb-2">Ökologisch</h4>
+              <div className="grid grid-cols-3 gap-3">
+                {dbMetrics
+                  .filter(m => m.category === 'ecological')
+                  .map(metric => (
+                    <div key={metric.id} className="bg-accent/30 p-3 rounded">
+                      <p className="text-xs text-gray-400">{metric.metric_type.replace(/_/g, ' ')}</p>
+                      <p className="text-lg font-bold">{metric.value} {metric.value_unit}</p>
+                      <p className="text-xs text-gray-500">{metric.provider} {metric.model_id && `/ ${metric.model_id}`}</p>
+                      <p className="text-xs text-gray-600 mt-1">Confidence: {metric.confidence}</p>
                     </div>
-                    <div className="flex items-center gap-6 text-sm">
-                      <div>
-                        <p className="text-gray-400">Energie</p>
-                        <p className="font-mono">{impact.energyKwh.toFixed(5)} kWh</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-400">CO₂</p>
-                        <p className="font-mono text-green-400">{impact.totalCo2G.toFixed(2)} g</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-400">Wasser</p>
-                        <p className="font-mono">{impact.waterMl.toFixed(1)} ml</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                {isExpanded && social && (
-                  <div className="p-4 border-t border-gray-700 bg-black/20">
-                    <div className="grid grid-cols-3 gap-4 mb-4">
-                      <div>
-                        <p className="text-xs text-gray-400 mb-1">Labor-Praktiken</p>
-                        <p className={`font-bold ${ratingColors[social.laborRating] || 'text-gray-400'}`}>
-                          {social.laborRating}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-400 mb-1">Daten-Ethik</p>
-                        <p className={`font-bold ${ratingColors[social.dataEthics] || 'text-gray-400'}`}>
-                          {social.dataEthics}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-400 mb-1">Kolonialismus-Index</p>
-                        <p className="font-bold text-amber-400">{social.colonialismIndex}/10</p>
-                      </div>
-                    </div>
-                    
-                    <div className="text-sm">
-                      <p className="text-gray-400 mb-1">Provider</p>
-                      <p className="mb-2">{social.provider}</p>
-                      <p className="text-xs text-gray-500">{social.clickworkerNotes}</p>
-                    </div>
-                    
-                    {info && (
-                      <div className="mt-4 pt-4 border-t border-gray-700 grid grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <p className="text-gray-400">Energie/1M Tokens</p>
-                          <p className="font-mono">{info.energyPerMillion}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-400">CO₂/1M Tokens</p>
-                          <p className="font-mono">{info.co2PerMillion}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-400">Wasser/1M Tokens</p>
-                          <p className="font-mono">{info.waterPerMillion}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                  ))}
               </div>
-            )
-          })}
+            </div>
+          )}
+          
+          {/* Social Metrics */}
+          {dbMetrics.filter(m => m.category === 'social').length > 0 && (
+            <div className="mb-4">
+              <h4 className="text-sm font-medium text-amber-400 mb-2">Sozial</h4>
+              <div className="grid grid-cols-3 gap-3">
+                {dbMetrics
+                  .filter(m => m.category === 'social')
+                  .map(metric => (
+                    <div key={metric.id} className="bg-accent/30 p-3 rounded">
+                      <p className="text-xs text-gray-400">{metric.metric_type.replace(/_/g, ' ')}</p>
+                      <p className="text-lg font-bold">{metric.value} {metric.value_unit}</p>
+                      <p className="text-xs text-gray-500">{metric.provider || 'Various'}</p>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Supply Chain Metrics */}
+          {dbMetrics.filter(m => m.category === 'supply_chain').length > 0 && (
+            <div>
+              <h4 className="text-sm font-medium text-orange-400 mb-2">Supply Chain</h4>
+              <div className="grid grid-cols-3 gap-3">
+                {dbMetrics
+                  .filter(m => m.category === 'supply_chain')
+                  .map(metric => (
+                    <div key={metric.id} className="bg-accent/30 p-3 rounded">
+                      <p className="text-xs text-gray-400">{metric.metric_type.replace(/_/g, ' ')}</p>
+                      <p className="text-lg font-bold">{metric.value} {metric.value_unit}</p>
+                      <p className="text-xs text-gray-500">{metric.provider || 'Various'}</p>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      )}
+      
+      {/* Model Breakdown (from session data) */}
+      {modelImpacts.length > 0 && (
+        <div className="bg-secondary p-6 rounded-lg border border-gray-700">
+          <h3 className="text-lg font-bold mb-4">Impact nach Model (Session-basiert)</h3>
+          
+          <div className="space-y-3">
+            {modelImpacts.map((impact) => {
+              const social = socialMetrics[impact.modelId]
+              const isExpanded = expandedModel === impact.modelId
+              
+              return (
+                <div key={impact.modelId} className="bg-accent/30 rounded-lg overflow-hidden">
+                  <div 
+                    className="p-4 cursor-pointer hover:bg-accent/50 transition-colors"
+                    onClick={() => setExpandedModel(isExpanded ? null : impact.modelId)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                        <div>
+                          <p className="font-medium">{impact.modelId}</p>
+                          <p className="text-xs text-gray-400">{impact.sessions} Sessions • {impact.totalTokens.toLocaleString()} Tokens</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-6 text-sm">
+                        <div>
+                          <p className="text-gray-400">Energie</p>
+                          <p className="font-mono">{impact.energyKwh.toFixed(5)} kWh</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400">CO₂</p>
+                          <p className="font-mono text-green-400">{impact.totalCo2G.toFixed(2)} g</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400">Wasser</p>
+                          <p className="font-mono">{impact.waterMl.toFixed(1)} ml</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {isExpanded && social && (
+                    <div className="p-4 border-t border-gray-700 bg-black/20">
+                      <div className="grid grid-cols-3 gap-4 mb-4">
+                        <div>
+                          <p className="text-xs text-gray-400 mb-1">Labor-Praktiken</p>
+                          <p className={`font-bold ${ratingColors[social.laborRating] || 'text-gray-400'}`}>
+                            {social.laborRating}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-400 mb-1">Daten-Ethik</p>
+                          <p className={`font-bold ${ratingColors[social.dataEthics] || 'text-gray-400'}`}>
+                            {social.dataEthics}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-400 mb-1">Kolonialismus-Index</p>
+                          <p className="font-bold text-amber-400">{social.colonialismIndex}/10</p>
+                        </div>
+                      </div>
+                      
+                      <div className="text-sm">
+                        <p className="text-gray-400 mb-1">Provider</p>
+                        <p className="mb-2">{social.provider}</p>
+                        <p className="text-xs text-gray-500 whitespace-pre-line">{social.clickworkerNotes}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
       
       {/* Sources */}
       <div className="bg-secondary p-6 rounded-lg border border-gray-700">
