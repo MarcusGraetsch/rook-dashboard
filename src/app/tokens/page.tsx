@@ -113,21 +113,21 @@ export default function TokensPage() {
         modelId,
         displayName: getModelPricingInfo(modelId)?.displayName || modelId,
         provider: getModelPricingInfo(modelId)?.provider || 'Unknown',
-        actualCost: 0,
-        payPerUseCost: 0,
+        actualCostEur: 0,
+        payPerUseCostEur: 0,
         tokens: 0
       }
     }
     
-    acc[modelId].actualCost += cost.actualCost
-    acc[modelId].payPerUseCost += cost.payPerUseCost
+    acc[modelId].actualCostEur += cost.actualCostEur
+    acc[modelId].payPerUseCostEur += cost.payPerUseCostEur
     acc[modelId].tokens += session.totalTokens
     
     return acc
-  }, {} as Record<string, { modelId: string; displayName: string; provider: string; actualCost: number; payPerUseCost: number; tokens: number }>)
+  }, {} as Record<string, { modelId: string; displayName: string; provider: string; actualCostEur: number; payPerUseCostEur: number; tokens: number }>)
 
-  const totalActualCost = Object.values(costAnalysis).reduce((sum, m) => sum + m.actualCost, 0)
-  const totalPayPerUseCost = Object.values(costAnalysis).reduce((sum, m) => sum + m.payPerUseCost, 0)
+  const totalActualCostEur = Object.values(costAnalysis).reduce((sum, m) => sum + m.actualCostEur, 0)
+  const totalPayPerUseCostEur = Object.values(costAnalysis).reduce((sum, m) => sum + m.payPerUseCostEur, 0)
 
   return (
     <div className="space-y-6">
@@ -210,7 +210,7 @@ export default function TokensPage() {
             <DollarSign className="text-highlight" />
             <div>
               <p className="text-sm text-gray-400">Kosten (geschätzt)</p>
-              <p className="text-2xl font-bold">${totalActualCost.toFixed(4)}</p>
+              <p className="text-2xl font-bold">{totalActualCostEur.toFixed(2)} €</p>
             </div>
           </div>
         </div>
@@ -254,10 +254,10 @@ export default function TokensPage() {
                       <span className="text-xs text-gray-500">{model.provider}</span>
                     </div>
                     <div className="text-right">
-                      <p className="font-mono text-highlight">${model.actualCost.toFixed(4)}</p>
-                      {model.actualCost < model.payPerUseCost && (
+                      <p className="font-mono text-highlight">{model.actualCostEur.toFixed(2)} €</p>
+                      {model.actualCostEur < model.payPerUseCostEur && (
                         <p className="text-xs text-green-400">
-                          (API: ${model.payPerUseCost.toFixed(4)})
+                          (API: {model.payPerUseCostEur.toFixed(2)} €)
                         </p>
                       )}
                     </div>
@@ -294,17 +294,17 @@ export default function TokensPage() {
               <div className="pt-3 border-t border-gray-700">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-400">Gesamt (tatsächlich):</span>
-                  <span className="font-bold text-highlight">${totalActualCost.toFixed(4)}</span>
+                  <span className="font-bold text-highlight">{totalActualCostEur.toFixed(2)} €</span>
                 </div>
-                {totalPayPerUseCost > totalActualCost && (
+                {totalPayPerUseCostEur > totalActualCostEur && (
                   <div className="flex justify-between items-center mt-1">
                     <span className="text-gray-400">Wenn API (pay-per-use):</span>
-                    <span className="text-green-400">${totalPayPerUseCost.toFixed(4)}</span>
+                    <span className="text-green-400">{totalPayPerUseCostEur.toFixed(2)} €</span>
                   </div>
                 )}
-                {totalPayPerUseCost > totalActualCost && (
+                {totalPayPerUseCostEur > totalActualCostEur && (
                   <p className="text-xs text-green-400 mt-2">
-                    ✓ Du sparst ${(totalPayPerUseCost - totalActualCost).toFixed(4)} durch Subscription/niedrigere API-Preise
+                    ✓ Du sparst {(totalPayPerUseCostEur - totalActualCostEur).toFixed(2)} € durch Subscription/niedrigere API-Preise
                   </p>
                 )}
               </div>
@@ -316,8 +316,8 @@ export default function TokensPage() {
       {/* Note */}
       <div className="bg-accent/50 p-4 rounded-lg border border-gray-600">
         <p className="text-sm text-gray-300">
-          💡 <strong>Hinweis:</strong> Preise basieren auf bekannten API-Preisen. 
-          Subscription-Modelle zeigen tatsächliche Kosten. Hover über ein Model für Details.
+          💡 <strong>Hinweis:</strong> Kosten in EUR basierend auf deinen Subscription-Preisen.
+          "API" zeigt was es bei Pay-per-Use kosten würde. Hover über ein Model für Details.
           {Object.keys(costAnalysis).length === 0 && ' Keine Model-Daten verfügbar.'}
         </p>
       </div>
@@ -362,7 +362,7 @@ export default function TokensPage() {
                     <span className="text-xs text-gray-500 ml-1">({session.contextTokens?.toLocaleString() || 0} ctx)</span>
                   </td>
                   <td className="px-4 py-2">
-                    <span className="text-highlight font-mono">${cost.actualCost.toFixed(6)}</span>
+                    <span className="text-highlight font-mono">{cost.actualCostEur.toFixed(4)} €</span>
                   </td>
                   <td className="px-4 py-2 text-gray-400 text-sm">
                     {new Date(session.updatedAt).toLocaleString('de-DE')}

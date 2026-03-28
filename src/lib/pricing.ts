@@ -1,16 +1,17 @@
 // LLM Pricing Data
 // Tracks subscription vs pay-per-use costs for models we use
+// All subscription prices in EUR (what Marcus actually pays)
 
 export interface ModelPricing {
   id: string
   name: string
   provider: string
-  inputPerMillion: number // Pay-per-use price per 1M input tokens
-  outputPerMillion: number // Pay-per-use price per 1M output tokens
+  inputPerMillion: number // Pay-per-use price per 1M input tokens (USD)
+  outputPerMillion: number // Pay-per-use price per 1M output tokens (USD)
   subscription?: {
-    price: number // Monthly price
-    includedTokens: number // Included tokens per month
-    pricePerExtraMillion: number // Extra cost per 1M tokens after limit
+    priceEur: number // Monthly price in EUR
+    includedTokens: number // Included tokens (0 = unlimited)
+    unlimitedAfter: boolean // True if unlimited after limit
   }
   contextWindow: number
   notes?: string
@@ -22,29 +23,29 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     id: 'MiniMax-M2.7',
     name: 'MiniMax M2.7',
     provider: 'MiniMax',
-    inputPerMillion: 0.30, // ~$0.30/1M input
-    outputPerMillion: 1.20, // ~$1.20/1M output
+    inputPerMillion: 0.30, // USD per 1M input tokens
+    outputPerMillion: 1.20, // USD per 1M output tokens
     subscription: {
-      price: 20, // MiniMax Coding Pro
-      includedTokens: 50000000, // 50M tokens included (geschätzt)
-      pricePerExtraMillion: 0
+      priceEur: 10.31, // 10,31 €/Monat
+      includedTokens: 0, // Unlimited
+      unlimitedAfter: true
     },
     contextWindow: 1000000,
-    notes: 'Subscription: MiniMax Coding Pro ($20/mo)'
+    notes: 'MiniMax Subscription (10,31 €/Monat, Unlimited)'
   },
   'kimi-coding/k2p5': {
     id: 'kimi-coding/k2p5',
     name: 'Kimi K2.5',
     provider: 'Moonshot',
-    inputPerMillion: 0.60, // ~$0.60/1M input
-    outputPerMillion: 2.00, // ~$2.00/1M output  
+    inputPerMillion: 0.60, // USD per 1M input tokens
+    outputPerMillion: 2.00, // USD per 1M output tokens  
     subscription: {
-      price: 19, // Kimi Pro (~$19/mo)
-      includedTokens: 10000000, // 10M tokens (geschätzt)
-      pricePerExtraMillion: 0
+      priceEur: 16.67, // 16,67 €/Monat
+      includedTokens: 0, // Unlimited
+      unlimitedAfter: true
     },
     contextWindow: 128000,
-    notes: 'Subscription: Kimi Pro (~$19/mo)'
+    notes: 'Kimi Subscription (16,67 €/Monat, Unlimited)'
   },
   'minimax-portal/MiniMax-M2': {
     id: 'minimax-portal/MiniMax-M2',
@@ -53,26 +54,54 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     inputPerMillion: 0.30,
     outputPerMillion: 1.20,
     subscription: {
-      price: 20, // MiniMax Coding Pro
-      includedTokens: 50000000,
-      pricePerExtraMillion: 0
+      priceEur: 10.31, // 10,31 €/Monat
+      includedTokens: 0, // Unlimited
+      unlimitedAfter: true
     },
     contextWindow: 1000000,
-    notes: 'Subscription: MiniMax Coding Pro ($20/mo)'
+    notes: 'MiniMax Subscription (10,31 €/Monat, Unlimited)'
+  },
+  'MiniMax-M2': {
+    id: 'MiniMax-M2',
+    name: 'MiniMax M2',
+    provider: 'MiniMax',
+    inputPerMillion: 0.30,
+    outputPerMillion: 1.20,
+    subscription: {
+      priceEur: 10.31,
+      includedTokens: 0,
+      unlimitedAfter: true
+    },
+    contextWindow: 1000000,
+    notes: 'MiniMax Subscription (10,31 €/Monat, Unlimited)'
+  },
+  'kimi-k2p5': {
+    id: 'kimi-k2p5',
+    name: 'Kimi K2.5',
+    provider: 'Moonshot',
+    inputPerMillion: 0.60,
+    outputPerMillion: 2.00,
+    subscription: {
+      priceEur: 16.67,
+      includedTokens: 0,
+      unlimitedAfter: true
+    },
+    contextWindow: 128000,
+    notes: 'Kimi Subscription (16,67 €/Monat, Unlimited)'
   },
   'gpt-4': {
     id: 'gpt-4',
     name: 'GPT-4',
     provider: 'OpenAI',
-    inputPerMillion: 15.00, // $15/1M input
-    outputPerMillion: 60.00, // $60/1M output
+    inputPerMillion: 15.00,
+    outputPerMillion: 60.00,
     subscription: {
-      price: 20, // ChatGPT Plus
-      includedTokens: 25000000, // 25M tokens included
-      pricePerExtraMillion: 0
+      priceEur: 23.00, // ChatGPT Plus
+      includedTokens: 0,
+      unlimitedAfter: true
     },
     contextWindow: 128000,
-    notes: 'Subscription (ChatGPT Plus) vs $15/1M API'
+    notes: 'ChatGPT Plus (23,00 €/Monat, Unlimited)'
   },
   'gpt-4-turbo': {
     id: 'gpt-4-turbo',
@@ -90,12 +119,12 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     inputPerMillion: 3.00,
     outputPerMillion: 15.00,
     subscription: {
-      price: 20, // Claude Pro
-      includedTokens: 5000000, // 5M tokens
-      pricePerExtraMillion: 0 // Unlimited after limit
+      priceEur: 21.42, // Claude Pro
+      includedTokens: 0,
+      unlimitedAfter: true
     },
     contextWindow: 200000,
-    notes: 'Claude Pro subscription vs API pricing'
+    notes: 'Claude Pro (21,42 €/Monat, Unlimited)'
   },
   'claude-opus': {
     id: 'claude-opus',
@@ -115,19 +144,20 @@ export function calculateCost(
   outputTokens: number,
   subscriptionMonths: number = 1
 ): {
-  actualCost: number
-  payPerUseCost: number
+  actualCostEur: number
+  payPerUseCostEur: number
   model: ModelPricing | undefined
   isSubscription: boolean
   savingsVsPayPerUse: number
   effectivePricePerMillion: number
 } {
   const model = MODEL_PRICING[modelId]
+  const USD_TO_EUR = 0.92 // Approximate rate
   
   if (!model) {
     return {
-      actualCost: 0,
-      payPerUseCost: 0,
+      actualCostEur: 0,
+      payPerUseCostEur: 0,
       model: undefined,
       isSubscription: false,
       savingsVsPayPerUse: 0,
@@ -135,40 +165,42 @@ export function calculateCost(
     }
   }
   
-  // Pay-per-use cost
+  // Pay-per-use cost in USD then convert to EUR
   const inputCost = (inputTokens / 1_000_000) * model.inputPerMillion
   const outputCost = (outputTokens / 1_000_000) * model.outputPerMillion
-  const payPerUseCost = inputCost + outputCost
+  const payPerUseCostUsd = inputCost + outputCost
+  const payPerUseCostEur = payPerUseCostUsd * USD_TO_EUR
   
-  let actualCost: number
+  let actualCostEur: number
   let isSubscription: boolean = false
   
   if (model.subscription) {
-    // Subscription model
     isSubscription = true
-    const totalSubscriptionCost = model.subscription.price * subscriptionMonths
-    const includedTokens = model.subscription.includedTokens * subscriptionMonths
-    
-    if (inputTokens + outputTokens <= includedTokens) {
-      // Within limit - just subscription cost
-      actualCost = totalSubscriptionCost
+    if (model.subscription.unlimitedAfter) {
+      // Unlimited subscription - just subscription cost
+      actualCostEur = model.subscription.priceEur * subscriptionMonths
     } else {
-      // Over limit - subscription + overage (but many subs have unlimited after)
-      actualCost = totalSubscriptionCost // Most subscriptions don't charge overage
+      // Limited subscription
+      const includedTokens = model.subscription.includedTokens * subscriptionMonths
+      if (inputTokens + outputTokens <= includedTokens) {
+        actualCostEur = model.subscription.priceEur * subscriptionMonths
+      } else {
+        actualCostEur = model.subscription.priceEur * subscriptionMonths
+      }
     }
   } else {
     // Pure pay-per-use
-    actualCost = payPerUseCost
+    actualCostEur = payPerUseCostEur
   }
   
   return {
-    actualCost,
-    payPerUseCost,
+    actualCostEur,
+    payPerUseCostEur,
     model,
     isSubscription,
-    savingsVsPayPerUse: payPerUseCost - actualCost,
+    savingsVsPayPerUse: payPerUseCostEur - actualCostEur,
     effectivePricePerMillion: inputTokens + outputTokens > 0 
-      ? (actualCost / (inputTokens + outputTokens)) * 1_000_000 
+      ? (actualCostEur / (inputTokens + outputTokens)) * 1_000_000 
       : 0
   }
 }
@@ -200,10 +232,14 @@ export function getModelPricingInfo(modelId: string): {
   
   let subscriptionDisplay: string | null = null
   if (model.subscription) {
-    const included = model.subscription.includedTokens >= 1_000_000 
-      ? `${model.subscription.includedTokens / 1_000_000}M`
-      : `${model.subscription.includedTokens / 1000}K`
-    subscriptionDisplay = `$${model.subscription.price}/mo (${included} tokens)`
+    if (model.subscription.unlimitedAfter) {
+      subscriptionDisplay = `${model.subscription.priceEur} €/mo (Unlimited)`
+    } else {
+      const included = model.subscription.includedTokens >= 1_000_000 
+        ? `${model.subscription.includedTokens / 1_000_000}M`
+        : `${model.subscription.includedTokens / 1000}K`
+      subscriptionDisplay = `${model.subscription.priceEur} €/mo (${included} tokens)`
+    }
   }
   
   return {
