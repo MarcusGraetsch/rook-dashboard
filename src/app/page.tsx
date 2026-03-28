@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Activity, Cpu, HardDrive, Clock, Users } from 'lucide-react'
+import { Activity, Cpu, HardDrive, Clock, Users, Zap, RefreshCw, Terminal, Database, Shield } from 'lucide-react'
+import Link from 'next/link'
 
 interface Session {
   key: string;
@@ -27,17 +28,23 @@ interface SystemStats {
   disk: string;
 }
 
+interface Activity {
+  type: 'session' | 'agent' | 'system'
+  message: string
+  time: Date
+}
+
 export default function Dashboard() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
   const [stats, setStats] = useState<SystemStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [gatewayError, setGatewayError] = useState(false)
+  const [activities, setActivities] = useState<Activity[]>([])
 
   useEffect(() => {
     async function fetchData() {
       try {
-        // Fetch from our API routes
         const [sessionsRes, statsRes] = await Promise.all([
           fetch('/api/gateway/sessions'),
           fetch('/api/gateway/stats'),
@@ -47,6 +54,16 @@ export default function Dashboard() {
           const data = await sessionsRes.json()
           setSessions(data.sessions || [])
           setAgents(data.agents || [])
+          
+          // Build activity feed from sessions
+          const newActivities: Activity[] = data.sessions
+            .slice(0, 5)
+            .map((s: Session) => ({
+              type: 'session' as const,
+              message: `${s.displayName} — ${s.totalTokens.toLocaleString()} tokens`,
+              time: new Date(s.updatedAt),
+            }))
+          setActivities(newActivities)
         } else {
           setGatewayError(true)
         }
@@ -64,23 +81,46 @@ export default function Dashboard() {
     }
     
     fetchData()
-    // Refresh every 30 seconds
     const interval = setInterval(fetchData, 30000)
     return () => clearInterval(interval)
   }, [])
 
-  // Get active session count (sessions updated in last 5 minutes)
   const activeSessions = sessions.filter(s => 
     Date.now() - s.updatedAt < 5 * 60 * 1000
   ).length
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Dashboard</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Dashboard</h2>
+        
+        {/* Quick Actions */}
+        <div className="flex items-center gap-2">
+          <Link
+            href="/kanban"
+            className="flex items-center gap-2 px-4 py-2 bg-highlight hover:bg-highlight/80 rounded-lg text-white text-sm"
+          >
+            📋 Kanban
+          </Link>
+          <Link
+            href="/agents"
+            className="flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-accent rounded-lg text-sm"
+          >
+            <Users className="w-4 h-4" />
+            Agents
+          </Link>
+        </div>
+      </div>
       
       {gatewayError && (
-        <div className="bg-red-900/50 border border-red-500 p-4 rounded-lg">
-          <p className="text-red-400">⚠️ Gateway nicht erreichbar. Dashboard-Daten nicht aktuell.</p>
+        <div className="bg-red-900/50 border border-red-500 p-4 rounded-lg flex items-center justify-between">
+          <p className="text-red-400">⚠️ Gateway nicht erreichbar</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-3 py-1 bg-red-600 hover:bg-red-500 rounded text-sm"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
         </div>
       )}
       
@@ -92,6 +132,7 @@ export default function Dashboard() {
             <div>
               <p className="text-sm text-gray-400">Sessions</p>
               <p className="text-2xl font-bold">{sessions.length}</p>
+              <p className="text-xs text-gray-500">{activeSessions} aktiv</p>
             </div>
           </div>
         </div>
@@ -102,6 +143,7 @@ export default function Dashboard() {
             <div>
               <p className="text-sm text-gray-400">Agents</p>
               <p className="text-2xl font-bold">{agents.length}</p>
+              <p className="text-xs text-gray-500">6 verfügbar</p>
             </div>
           </div>
         </div>
@@ -110,8 +152,9 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             <Cpu className="text-highlight" />
             <div>
-              <p className="text-sm text-gray-400">CPU Load</p>
+              <p className="text-sm text-gray-400">CPU</p>
               <p className="text-2xl font-bold">{stats?.cpu?.split(' ')[0] || '—'}</p>
+              <p className="text-xs text-gray-500">Load Average</p>
             </div>
           </div>
         </div>
@@ -122,63 +165,128 @@ export default function Dashboard() {
             <div>
               <p className="text-sm text-gray-400">Memory</p>
               <p className="text-2xl font-bold">{stats?.memory?.used || '—'}</p>
+              <p className="text-xs text-gray-500">/ {stats?.memory?.total || '?'}</p>
             </div>
           </div>
         </div>
       </div>
       
-      {/* Agent Status */}
-      <div className="bg-secondary p-6 rounded-lg border border-gray-700">
-        <h3 className="text-lg font-bold mb-4">Agent Status</h3>
-        {loading ? (
-          <p className="text-gray-400">Loading...</p>
-        ) : (
-          <div className="space-y-3">
-            {agents.map((agent) => {
-              const agentSession = sessions.find(s => s.key.includes(`:${agent.id}:`));
-              const isActive = agentSession && (Date.now() - agentSession.updatedAt < 5 * 60 * 1000);
-              
-              return (
-                <div key={agent.id} className="flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-green-500' : 'bg-gray-500'}`}></span>
-                    <span className="text-xl">{agent.emoji}</span>
-                    <span className="font-medium">{agent.name}</span>
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-3 gap-6">
+        {/* Agent Status */}
+        <div className="col-span-2 bg-secondary p-6 rounded-lg border border-gray-700">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold flex items-center gap-2">
+              <Zap className="w-5 h-5 text-highlight" />
+              Agent Status
+            </h3>
+            <Link href="/agents" className="text-sm text-highlight hover:underline">
+              Alle anzeigen →
+            </Link>
+          </div>
+          {loading ? (
+            <p className="text-gray-400">Laden...</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {agents.map((agent) => {
+                const agentSession = sessions.find(s => s.key.includes(`:${agent.id}:`));
+                const isActive = agentSession && (Date.now() - agentSession.updatedAt < 5 * 60 * 1000);
+                
+                return (
+                  <div key={agent.id} className="flex items-center justify-between p-3 bg-accent/30 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-green-500' : 'bg-gray-500'}`}></span>
+                      <span className="text-xl">{agent.emoji}</span>
+                      <div>
+                        <p className="font-medium">{agent.name}</p>
+                        <p className="text-xs text-gray-500">{agent.id}</p>
+                      </div>
+                    </div>
                     {agent.sandbox && (
                       <span className="text-xs bg-purple-600 px-2 py-0.5 rounded">sandbox</span>
                     )}
-                  </span>
-                  <span className="text-sm text-gray-400">
-                    {isActive ? 'Active' : 'Idle'}
-                  </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        
+        {/* Activity Feed */}
+        <div className="bg-secondary p-6 rounded-lg border border-gray-700">
+          <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+            <Clock className="w-5 h-5 text-highlight" />
+            Letzte Aktivität
+          </h3>
+          {activities.length === 0 ? (
+            <p className="text-gray-400 text-sm">Keine Aktivitäten</p>
+          ) : (
+            <div className="space-y-3">
+              {activities.map((activity, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <div className={`w-2 h-2 rounded-full mt-1.5 ${
+                    activity.type === 'session' ? 'bg-highlight' :
+                    activity.type === 'agent' ? 'bg-blue-500' : 'bg-green-500'
+                  }`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm truncate">{activity.message}</p>
+                    <p className="text-xs text-gray-500">
+                      {activity.time.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       
       {/* Gateway Info */}
-      <div className="bg-secondary p-6 rounded-lg border border-gray-700">
-        <h3 className="text-lg font-bold mb-4">Gateway</h3>
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <p className="text-gray-400">Version</p>
-            <p>2026.3.13</p>
-          </div>
-          <div>
-            <p className="text-gray-400">Port</p>
-            <p>18789</p>
-          </div>
-          <div>
-            <p className="text-gray-400">Default Model</p>
-            <p>MiniMax-M2.7</p>
-          </div>
-          <div>
-            <p className="text-gray-400">Uptime</p>
-            <p>{stats?.uptime || '—'}</p>
+      <div className="grid grid-cols-4 gap-4">
+        <div className="col-span-2 bg-secondary p-4 rounded-lg border border-gray-700">
+          <h4 className="font-medium mb-2 flex items-center gap-2">
+            <Terminal className="w-4 h-4 text-gray-400" />
+            Gateway
+          </h4>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div>
+              <p className="text-gray-400">Version</p>
+              <p>2026.3.13</p>
+            </div>
+            <div>
+              <p className="text-gray-400">Port</p>
+              <p>18789</p>
+            </div>
+            <div>
+              <p className="text-gray-400">Model</p>
+              <p>MiniMax-M2.7</p>
+            </div>
+            <div>
+              <p className="text-gray-400">Uptime</p>
+              <p>{stats?.uptime || '—'}</p>
+            </div>
           </div>
         </div>
+        
+        <Link href="/tokens" className="bg-secondary p-4 rounded-lg border border-gray-700 hover:border-highlight transition-colors">
+          <h4 className="font-medium mb-2 flex items-center gap-2">
+            <Database className="w-4 h-4 text-highlight" />
+            Token Usage
+          </h4>
+          <p className="text-2xl font-bold text-highlight">
+            {sessions.reduce((sum, s) => sum + s.totalTokens, 0).toLocaleString()}
+          </p>
+          <p className="text-sm text-gray-400">Total Tokens</p>
+        </Link>
+        
+        <Link href="/cron" className="bg-secondary p-4 rounded-lg border border-gray-700 hover:border-highlight transition-colors">
+          <h4 className="font-medium mb-2 flex items-center gap-2">
+            <Clock className="w-4 h-4 text-highlight" />
+            Cron Jobs
+          </h4>
+          <p className="text-2xl font-bold text-highlight">3</p>
+          <p className="text-sm text-gray-400">Aktiv</p>
+        </Link>
       </div>
     </div>
   )
