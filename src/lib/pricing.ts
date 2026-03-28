@@ -50,11 +50,11 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
       includedTokens: 0,
       unlimitedAfter: false,
       limitType: 'requests',
-      limitValue: 200,
-      limitPeriod: '5h'
+      limitValue: 2048,
+      limitPeriod: '7 days'
     },
     contextWindow: 128000,
-    notes: 'Kimi Pro: ~200 Requests/5h'
+    notes: 'Kimi Pro: 2.048 Requests/Woche'
   },
   'minimax-portal/MiniMax-M2': {
     id: 'minimax-portal/MiniMax-M2',
@@ -101,11 +101,11 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
       includedTokens: 0,
       unlimitedAfter: false,
       limitType: 'requests',
-      limitValue: 200,
-      limitPeriod: '5h'
+      limitValue: 2048,
+      limitPeriod: '7 days'
     },
     contextWindow: 128000,
-    notes: 'Kimi Pro: ~200 Requests/5h'
+    notes: 'Kimi Pro: 2.048 Requests/Woche'
   },
   'gpt-4': {
     id: 'gpt-4',
