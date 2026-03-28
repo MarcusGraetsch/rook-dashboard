@@ -47,14 +47,14 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     outputPerMillion: 2.00, // USD per 1M output tokens  
     subscription: {
       priceEur: 16.67, // 16,67 €/Monat
-      includedTokens: 0, // Info nicht verfügbar
+      includedTokens: 0,
       unlimitedAfter: false,
-      limitType: 'unknown',
-      limitValue: 0,
-      limitPeriod: 'unknown'
+      limitType: 'requests',
+      limitValue: 200,
+      limitPeriod: '5h'
     },
     contextWindow: 128000,
-    notes: 'Kimi Pro: Token-Limit unbekannt (bitte recherchieren)'
+    notes: 'Kimi Pro: ~200 Requests/5h'
   },
   'minimax-portal/MiniMax-M2': {
     id: 'minimax-portal/MiniMax-M2',
@@ -100,12 +100,12 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
       priceEur: 16.67,
       includedTokens: 0,
       unlimitedAfter: false,
-      limitType: 'unknown',
-      limitValue: 0,
-      limitPeriod: 'unknown'
+      limitType: 'requests',
+      limitValue: 200,
+      limitPeriod: '5h'
     },
     contextWindow: 128000,
-    notes: 'Kimi Pro: Token-Limit unbekannt'
+    notes: 'Kimi Pro: ~200 Requests/5h'
   },
   'gpt-4': {
     id: 'gpt-4',
