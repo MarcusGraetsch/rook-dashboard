@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PROVIDER_RISK_PROFILES } from '@/lib/labor/riskMapping';
 import { MetricResultSchema, type MetricResult } from '@/lib/labor/schemas';
+import { getProviderMetricsSummary } from '@/lib/labor/metrics';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,35 +18,16 @@ interface LaborSummaryResponse {
 }
 
 /**
- * First version:
- * - Computes a Transparency Risk Score per provider
- * - Explicitly marked as exposure/proxy, not exact.
+ * Labor summary API
+ * - Returns per-provider metrics: transparency, hidden labor exposure, source coverage
  */
 export async function GET(_req: NextRequest) {
   try {
-    const now = new Date().toISOString();
-
-    const byProvider: ProviderMetrics[] = PROVIDER_RISK_PROFILES.map((profile) => {
-      const metric: MetricResult = {
-        metric_id: 'transparency_risk_score_v1',
-        value: profile.transparency_score,
-        label: mapTransparencyLabel(profile.transparency_score),
-        unit: 'index_0_100',
-        category: 'transparency',
-        confidence: profile.confidence,
-        exposure: true,
-        from: '',
-        to: now,
-        methodology_version: profile.methodology_version,
-        sources: profile.sources,
-        calculated_at: now,
-      };
-
-      const parsed = MetricResultSchema.parse(metric);
-
+    const byProvider: ProviderMetrics[] = getProviderMetricsSummary().map((entry) => {
+      const metrics = entry.metrics.map((m) => MetricResultSchema.parse(m));
       return {
-        provider_id: profile.provider_id,
-        metrics: [parsed],
+        provider_id: entry.provider_id,
+        metrics,
       };
     });
 
@@ -63,11 +44,4 @@ export async function GET(_req: NextRequest) {
       { status: 500 },
     );
   }
-}
-
-function mapTransparencyLabel(score: number): string {
-  if (score <= 25) return 'comparatively transparent';
-  if (score <= 50) return 'mixed visibility';
-  if (score <= 75) return 'opaque';
-  return 'highly opaque';
 }

@@ -80,6 +80,8 @@ export default function LaborPage() {
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         {data.map((pm) => {
           const transparency = pm.metrics.find((m) => m.metric_id === 'transparency_risk_score_v1')
+          const exposure = pm.metrics.find((m) => m.metric_id === 'hidden_labor_exposure_score_v1')
+          const coverage = pm.metrics.find((m) => m.metric_id === 'source_coverage_score_v1')
           if (!transparency) return null
 
           const score = typeof transparency.value === 'number' ? transparency.value : 0
