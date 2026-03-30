@@ -118,17 +118,19 @@ export function KanbanCard({ task, isDragging, onUpdate, onDelete, onArchive }: 
       <div
         ref={setNodeRef}
         style={style}
+        {...attributes}
+        {...listeners}
         className={`bg-secondary rounded p-3 border border-gray-700 border-l-4 ${priorityBorder} cursor-pointer hover:border-highlight ${
           isDragging ? 'shadow-lg' : ''
-        } ${isSortableDragging ? 'opacity-50' : ''}`}
+        } ${isSortableDragging ? 'opacity-50' : ''} touch-none`}
         onClick={() => setShowModal(true)}
       >
         <div className="flex items-start gap-2">
           <button
-            {...attributes}
-            {...listeners}
             className="mt-1 p-1 hover:bg-accent rounded cursor-grab active:cursor-grabbing"
             onClick={(e) => e.stopPropagation()}
+            type="button"
+            aria-label="Drag ticket"
           >
             <GripVertical className="w-4 h-4 text-gray-500" />
           </button>
