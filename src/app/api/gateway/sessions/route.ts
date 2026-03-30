@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server';
+import { getDefaultModel, getIndexedAgents, getIndexedSessions } from '@/lib/control/session-index';
 
-// GET /api/gateway/sessions - Get sessions (placeholder)
 export async function GET() {
   try {
-    // Placeholder - sessions_list tool doesn't exist in gateway
+    const sessions = getIndexedSessions(100);
     return NextResponse.json({
-      error: 'Gateway tool sessions_list not available',
-      sessions: [],
-    }, { status: 503 });
+      source: 'local-session-index',
+      sessions,
+      agents: getIndexedAgents(),
+      defaultModel: getDefaultModel(sessions),
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

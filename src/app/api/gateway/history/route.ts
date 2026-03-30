@@ -1,15 +1,9 @@
 import { NextResponse } from 'next/server';
+import { getTokenHistory } from '@/lib/control/session-index';
 
-// GET /api/gateway/history - Get historical token usage data
 export async function GET() {
   try {
-    // Placeholder - sessions_list tool doesn't exist in gateway
-    return NextResponse.json({
-      error: 'Gateway tool sessions_list not available',
-      days: [],
-      maxTokens: 0,
-      total: 0,
-    }, { status: 503 });
+    return NextResponse.json(getTokenHistory(7));
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

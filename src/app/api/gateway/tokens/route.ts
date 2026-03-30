@@ -1,40 +1,9 @@
 import { NextResponse } from 'next/server';
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
-
-const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || 'e860d5a94d6b9558093c05fa0d4b3018092db93ec5755e6a';
-const GATEWAY_URL = process.env.GATEWAY_URL || 'http://localhost:18789';
-
-async function gatewayInvoke(tool: string, args: Record<string, any> = {}) {
-  const res = await fetch(`${GATEWAY_URL}/tools/invoke`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${GATEWAY_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ tool, args }),
-  });
-  
-  if (!res.ok) {
-    throw new Error(`Gateway error: ${res.status}`);
-  }
-  
-  const data = await res.json();
-  if (!data.ok) {
-    throw new Error(data.error?.message || 'Unknown error');
-  }
-  
-  return data.result;
-}
+import { getIndexedSessions } from '@/lib/control/session-index';
 
 export async function GET() {
   try {
-    // Get sessions
-    const sessionsResult = await gatewayInvoke('sessions_list', { limit: 50 });
-    const sessionsData = JSON.parse(sessionsResult.content[0].text);
-    const sessions = sessionsData.sessions || [];
-    
-    // Calculate token usage
+    const sessions = getIndexedSessions(500);
     const now = Date.now();
     const dayAgo = now - 24 * 60 * 60 * 1000;
     const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
@@ -43,7 +12,7 @@ export async function GET() {
     let todayTokens = 0;
     let weekTokens = 0;
     
-    sessions.forEach((session: any) => {
+    sessions.forEach((session) => {
       const tokens = session.totalTokens || 0;
       totalTokens += tokens;
       
@@ -60,13 +29,16 @@ export async function GET() {
     const estimatedCostToday = (todayTokens / 1_000_000) * (0.30 * 0.3 + 1.20 * 0.7);
     
     // Per-session breakdown
-    const sessionBreakdown = sessions.map((s: any) => ({
+    const sessionBreakdown = sessions.map((s) => ({
       name: s.displayName || s.key,
       tokens: s.totalTokens || 0,
       updatedAt: new Date(s.updatedAt).toISOString(),
-    })).sort((a: any, b: any) => b.tokens - a.tokens);
+      agent: s.agent,
+      channel: s.lastChannel,
+    })).sort((a, b) => b.tokens - a.tokens);
     
     return NextResponse.json({
+      source: 'local-session-index',
       summary: {
         totalTokens,
         todayTokens,
