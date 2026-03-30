@@ -171,10 +171,14 @@ export function KanbanBoard() {
       
       if (res.ok) {
         fetchBoards()
+        return true
       }
     } catch (e) {
       console.error('Failed to update task:', e)
     }
+
+    fetchBoards()
+    return false
   }
 
   async function deleteTask(taskId: string) {
@@ -220,10 +224,77 @@ export function KanbanBoard() {
       
       if (res.ok) {
         fetchBoards()
+        return true
       }
     } catch (e) {
       console.error('Failed to move task:', e)
     }
+
+    fetchBoards()
+    return false
+  }
+
+  function updateBoardState(transform: (board: Board) => Board) {
+    setBoards((currentBoards) => currentBoards.map(transform))
+    setActiveBoard((currentBoard) => (currentBoard ? transform(currentBoard) : currentBoard))
+  }
+
+  function applyTaskMoveLocally(taskId: string, targetColumnId: string, targetPosition: number) {
+    updateBoardState((board) => {
+      const sourceColumn = board.columns.find((column) =>
+        column.tasks.some((task) => task.id === taskId)
+      )
+      const destinationColumn = board.columns.find((column) => column.id === targetColumnId)
+
+      if (!sourceColumn || !destinationColumn) {
+        return board
+      }
+
+      const movingTask = sourceColumn.tasks.find((task) => task.id === taskId)
+      if (!movingTask) {
+        return board
+      }
+
+      const sourceTasks = sourceColumn.tasks
+        .filter((task) => task.id !== taskId)
+        .map((task, index) => ({ ...task, position: index }))
+
+      const destinationBase =
+        sourceColumn.id === destinationColumn.id ? sourceTasks : destinationColumn.tasks
+      const insertAt = Math.max(0, Math.min(targetPosition, destinationBase.length))
+      const destinationTasks = [...destinationBase]
+
+      destinationTasks.splice(insertAt, 0, {
+        ...movingTask,
+        column_id: destinationColumn.id,
+        position: insertAt,
+      })
+
+      const normalizedDestinationTasks = destinationTasks.map((task, index) => ({
+        ...task,
+        column_id: destinationColumn.id,
+        position: index,
+      }))
+
+      return {
+        ...board,
+        columns: board.columns.map((column) => {
+          if (column.id === sourceColumn.id && column.id === destinationColumn.id) {
+            return { ...column, tasks: normalizedDestinationTasks }
+          }
+
+          if (column.id === sourceColumn.id) {
+            return { ...column, tasks: sourceTasks }
+          }
+
+          if (column.id === destinationColumn.id) {
+            return { ...column, tasks: normalizedDestinationTasks }
+          }
+
+          return column
+        }),
+      }
+    })
   }
 
   function handleDragStart(event: DragStartEvent) {
@@ -262,6 +333,7 @@ export function KanbanBoard() {
             const newTasks = [...column.tasks]
             newTasks.splice(oldIndex, 1)
             newTasks.splice(newIndex, 0, activeTask)
+            applyTaskMoveLocally(activeId, overColumnId, newIndex)
             newTasks.forEach((task, index) => {
               if (task.position !== index) {
                 updateTask(task.id, { position: index })
@@ -277,6 +349,7 @@ export function KanbanBoard() {
     const targetColumn = activeBoard?.columns.find(c => c.id === overColumnId)
     if (targetColumn) {
       const maxPosition = Math.max(...targetColumn.tasks.map(t => t.position), -1)
+      applyTaskMoveLocally(activeId, overColumnId, maxPosition + 1)
       moveTask(activeId, overColumnId, maxPosition + 1)
     }
   }
