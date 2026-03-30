@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
-const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || '398e4457a0c2272f7f4a4559a8e80876479fe2f1ecdf2ee1';
+const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || 'e860d5a94d6b9558093c05fa0d4b3018092db93ec5755e6a';
 const GATEWAY_URL = process.env.GATEWAY_URL || 'http://localhost:18789';
 
 async function gatewayInvoke(tool: string, args: Record<string, any> = {}) {

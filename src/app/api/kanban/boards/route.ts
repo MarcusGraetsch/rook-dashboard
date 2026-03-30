@@ -19,6 +19,7 @@ export async function GET() {
         (SELECT COUNT(*) FROM subtasks WHERE task_id = t.id) as subtask_count,
         (SELECT COUNT(*) FROM subtasks WHERE task_id = t.id AND completed = 1) as subtask_done
       FROM tasks t
+      WHERE t.archived_at IS NULL
       ORDER BY t.position
     `).all() as any[];
     
@@ -39,6 +40,14 @@ export async function GET() {
             labels: task.labels,
             assignee: task.assignee,
             due_date: task.due_date,
+            column_name: col.name,
+            canonical_task_id: task.canonical_task_id,
+            project_id: task.project_id,
+            related_repo: task.related_repo,
+            github_issue_number: task.github_issue_number,
+            github_issue_url: task.github_issue_url,
+            sync_status: task.sync_status,
+            sync_error: task.sync_error,
             created_at: task.created_at,
             updated_at: task.updated_at,
             subtask_count: task.subtask_count || 0,

@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { getDb, Task } from '@/lib/db';
+import {
+  archiveKanbanTaskSync,
+  autoSyncKanbanTaskToGithub,
+  syncKanbanTaskToCanonical,
+} from '@/lib/control/task-sync';
 import { randomUUID } from 'crypto';
 
 function generateId() {
@@ -17,10 +22,10 @@ export async function GET(request: NextRequest) {
     let tasks;
     if (column_id) {
       tasks = db.prepare(
-        'SELECT * FROM tasks WHERE column_id = ? ORDER BY position'
+        'SELECT * FROM tasks WHERE column_id = ? AND archived_at IS NULL ORDER BY position'
       ).all(column_id);
     } else {
-      tasks = db.prepare('SELECT * FROM tasks ORDER BY position').all();
+      tasks = db.prepare('SELECT * FROM tasks WHERE archived_at IS NULL ORDER BY position').all();
     }
     
     return NextResponse.json(tasks);
@@ -54,14 +59,20 @@ export async function POST(request: NextRequest) {
       description || null,
       position,
       priority || 'medium',
-      JSON.stringify(labels || []),
+      JSON.stringify(Array.isArray(labels) ? labels : (labels ? JSON.parse(labels) : [])),
       assignee || null,
       due_date || null
     );
     
-    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
-    
-    return NextResponse.json(task, { status: 201 });
+    const sync = await syncKanbanTaskToCanonical(db, id);
+    try {
+      await autoSyncKanbanTaskToGithub(db, sync.canonicalTaskId);
+    } catch {
+      // Canonical task is already saved; GitHub sync errors are persisted separately.
+    }
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as Task | undefined;
+
+    return NextResponse.json({ ...(task || {}), sync }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -95,7 +106,7 @@ export async function PUT(request: NextRequest) {
     }
     if (labels !== undefined) {
       updates.push('labels = ?');
-      values.push(JSON.stringify(labels));
+      values.push(JSON.stringify(Array.isArray(labels) ? labels : (labels ? JSON.parse(labels) : [])));
     }
     if (assignee !== undefined) {
       updates.push('assignee = ?');
@@ -111,7 +122,7 @@ export async function PUT(request: NextRequest) {
     }
     
     if (updates.length > 0) {
-      updates.push('updated_at = datetime("now")');
+      updates.push('updated_at = datetime(\'now\')');
       values.push(id);
       
       db.prepare(
@@ -119,9 +130,15 @@ export async function PUT(request: NextRequest) {
       ).run(...values);
     }
     
-    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
-    
-    return NextResponse.json(task);
+    const sync = await syncKanbanTaskToCanonical(db, id);
+    try {
+      await autoSyncKanbanTaskToGithub(db, sync.canonicalTaskId);
+    } catch {
+      // Canonical task is already saved; GitHub sync errors are persisted separately.
+    }
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as Task | undefined;
+
+    return NextResponse.json({ ...(task || {}), sync });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -138,9 +155,10 @@ export async function DELETE(request: NextRequest) {
     }
     
     const db = getDb();
+    const archived = await archiveKanbanTaskSync(db, id);
     db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
     
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, archived });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

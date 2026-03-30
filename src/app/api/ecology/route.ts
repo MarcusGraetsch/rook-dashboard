@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { calculateEcologicalImpact, MODEL_ECOLOGY, MODEL_SOCIAL } from '@/lib/ecology';
 
-const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || '398e4457a0c2272f7f4a4559a8e80876479fe2f1ecdf2ee1';
+const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || 'e860d5a94d6b9558093c05fa0d4b3018092db93ec5755e6a';
 const GATEWAY_URL = process.env.GATEWAY_URL || 'http://localhost:18789';
 
 async function gatewayInvoke(tool: string, args: Record<string, any> = {}) {
@@ -23,10 +23,35 @@ async function gatewayInvoke(tool: string, args: Record<string, any> = {}) {
 // GET /api/ecology - Get ecological impact for all sessions
 export async function GET() {
   try {
-    // Get sessions with token data
-    const sessionsResult = await gatewayInvoke('sessions_list', { limit: 100 });
-    const sessionsData = JSON.parse(sessionsResult.content[0].text);
-    const sessions = sessionsData.sessions || [];
+    let sessions: any[] = [];
+    
+    try {
+      // Get sessions with token data from gateway
+      const sessionsResult = await gatewayInvoke('sessions_list', { limit: 100 });
+      const sessionsData = JSON.parse(sessionsResult.content[0].text);
+      sessions = sessionsData.sessions || [];
+    } catch (gatewayError: any) {
+      // Gateway tool doesn't exist - return empty/fallback data
+      if (gatewayError.message?.includes('not available') || gatewayError.message?.includes('404')) {
+        return NextResponse.json({
+          summary: {
+            totalEnergyKwh: 0,
+            totalCo2G: 0,
+            totalWaterMl: 0,
+            totalHardwareCo2G: 0,
+            totalCo2AllG: 0,
+            co2EquivalentDescription: 'Keine Daten verfügbar',
+            sessionCount: 0,
+          },
+          byModel: [],
+          availableModels: Object.keys(MODEL_ECOLOGY),
+          socialMetrics: MODEL_SOCIAL,
+          fallback: true,
+          message: 'Gateway sessions_list tool not available',
+        });
+      }
+      throw gatewayError;
+    }
 
     // Calculate impact per model
     const modelImpacts: Record<string, {

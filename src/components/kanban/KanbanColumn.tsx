@@ -12,11 +12,19 @@ interface Task {
   column_id: string
   title: string
   description: string | null
+  column_name?: string | null
   position: number
   priority: 'low' | 'medium' | 'high' | 'urgent'
   labels: string
   assignee: string | null
   due_date: string | null
+  canonical_task_id?: string | null
+  project_id?: string | null
+  related_repo?: string | null
+  github_issue_number?: number | null
+  github_issue_url?: string | null
+  sync_status?: string | null
+  sync_error?: string | null
   subtask_count?: number
   subtask_done?: number
 }
@@ -35,9 +43,10 @@ interface Props {
   onAddTask: (columnId: string, title: string, data: Partial<Task>) => void
   onUpdateTask: (taskId: string, updates: Partial<Task>) => void
   onDeleteTask: (taskId: string) => void
+  onArchiveTask: (taskId: string) => void
 }
 
-export function KanbanColumn({ column, onAddTask, onUpdateTask, onDeleteTask }: Props) {
+export function KanbanColumn({ column, onAddTask, onUpdateTask, onDeleteTask, onArchiveTask }: Props) {
   const [isAdding, setIsAdding] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [showFullModal, setShowFullModal] = useState(false)
@@ -104,6 +113,7 @@ export function KanbanColumn({ column, onAddTask, onUpdateTask, onDeleteTask }: 
                   task={task}
                   onUpdate={onUpdateTask}
                   onDelete={onDeleteTask}
+                  onArchive={onArchiveTask}
                 />
               ))}
           </SortableContext>

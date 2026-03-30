@@ -11,9 +11,10 @@ interface Session {
   updatedAt: number;
   lastChannel: string;
   contextTokens: number;
+  agent?: string;
 }
 
-const CHANNELS = ['all', 'telegram', 'cli', 'web']
+const CHANNELS = ['all', 'telegram', 'cli', 'web', 'discord']
 
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([])
@@ -26,10 +27,20 @@ export default function SessionsPage() {
   useEffect(() => {
     async function fetchSessions() {
       try {
-        const res = await fetch('/api/gateway/sessions')
+        // Try the new memory/tokens API first, fallback to gateway
+        const res = await fetch('/api/memory/tokens')
         if (res.ok) {
           const data = await res.json()
-          setSessions(data.sessions || [])
+          setSessions((data.sessions || []).map((s: any) => ({
+            key: s.name,
+            displayName: s.agent + ' / ' + s.name.substring(0, 8),
+            model: 'unknown',
+            totalTokens: s.tokens,
+            updatedAt: new Date(s.updatedAt).getTime(),
+            lastChannel: 'web',
+            contextTokens: 0,
+            agent: s.agent,
+          })))
         } else {
           setError(true)
         }
