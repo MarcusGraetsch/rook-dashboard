@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Activity, Cpu, HardDrive, Clock, Users, Zap, RefreshCw, Terminal, Database, Shield } from 'lucide-react'
+import { Activity, Cpu, HardDrive, Clock, Users, Zap, RefreshCw, Terminal, Database, Shield, Filter } from 'lucide-react'
 import Link from 'next/link'
 import KpiCard from '@/components/dashboard/KpiCard'
+import DateRangePicker, { DateRange } from '@/components/dashboard/DateRangePicker'
 
 interface Session {
   key: string;
@@ -43,9 +44,15 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [gatewayError, setGatewayError] = useState(false)
   const [activities, setActivities] = useState<Activity[]>([])
+  const [dateRange, setDateRange] = useState<DateRange>({
+    from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+    to: new Date()
+  })
 
   useEffect(() => {
     async function fetchData() {
+      // Date range filter would be applied here - for now just fetch all
+      // The filter can be passed as query params to the API
       try {
         const [sessionsRes, statsRes] = await Promise.all([
           fetch('/api/gateway/sessions'),
@@ -97,8 +104,17 @@ export default function Dashboard() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Dashboard</h2>
         
-        {/* Quick Actions */}
+        {/* Date Range Picker */}
         <div className="flex items-center gap-2">
+          <DateRangePicker
+            value={dateRange}
+            onChange={(range) => {
+              setDateRange(range)
+              // Here you would typically trigger a data refresh with the new range
+              // For example: fetchData(range.from, range.to)
+              console.log('Date range changed:', range)
+            }}
+          />
           <Link
             href="/kanban"
             className="flex items-center gap-2 px-4 py-2 bg-highlight hover:bg-highlight/80 rounded-lg text-white text-sm"
