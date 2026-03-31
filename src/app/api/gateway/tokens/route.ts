@@ -1,9 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getIndexedSessions } from '@/lib/control/session-index';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const sessions = getIndexedSessions(500);
+    const { searchParams } = new URL(request.url);
+    const from = searchParams.get('from');
+    const to = searchParams.get('to');
+    
+    const sessions = getIndexedSessions(500, from, to);
     const now = Date.now();
     const dayAgo = now - 24 * 60 * 60 * 1000;
     const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
