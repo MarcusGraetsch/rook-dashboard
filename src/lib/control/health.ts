@@ -9,6 +9,7 @@ const execFileAsync = promisify(execFile);
 const OPERATIONS_DIR =
   process.env.ROOK_OPERATIONS_DIR || '/root/.openclaw/workspace/operations';
 const HEALTH_DIR = path.join(OPERATIONS_DIR, 'health');
+const RUNTIME_SMOKE_FILE = path.join(HEALTH_DIR, 'runtime-smoke.json');
 
 const AGENT_WORKSPACES: Record<string, string> = {
   rook: '/root/.openclaw/workspace',
@@ -40,7 +41,21 @@ export interface HealthSnapshot {
   runtime: {
     session_count: number;
     latest_session_update_at: string | null;
+    smoke_ok?: boolean;
+    smoke_checked_at?: string | null;
   };
+}
+
+interface RuntimeSmokeEntry {
+  agent_id: string;
+  ok: boolean;
+  reason: string | null;
+}
+
+interface RuntimeSmokeSnapshot {
+  updated_at: string;
+  ok: boolean;
+  results: RuntimeSmokeEntry[];
 }
 
 async function safeReadDir(dirPath: string): Promise<string[]> {
@@ -54,6 +69,15 @@ async function safeReadDir(dirPath: string): Promise<string[]> {
 async function safeStat(filePath: string) {
   try {
     return await fs.stat(filePath);
+  } catch {
+    return null;
+  }
+}
+
+async function readRuntimeSmoke(): Promise<RuntimeSmokeSnapshot | null> {
+  try {
+    const raw = await fs.readFile(RUNTIME_SMOKE_FILE, 'utf8');
+    return JSON.parse(raw) as RuntimeSmokeSnapshot;
   } catch {
     return null;
   }
@@ -135,21 +159,30 @@ function deriveStatus(agentId: string, tasks: CanonicalTask[]) {
 
 async function buildSnapshot(agentId: string): Promise<HealthSnapshot> {
   const workspace = AGENT_WORKSPACES[agentId] || `/root/.openclaw/workspace-${agentId}`;
-  const runtime = await latestSessionUpdate(agentId);
-  const tasks = await getCanonicalTasks();
+  const [runtime, runtimeSmoke, tasks] = await Promise.all([
+    latestSessionUpdate(agentId),
+    readRuntimeSmoke(),
+    getCanonicalTasks(),
+  ]);
+  const smokeEntry = runtimeSmoke?.results?.find((entry) => entry.agent_id === agentId) || null;
   const taskState = deriveStatus(agentId, tasks);
   const [remote, head] = await Promise.all([gitRemote(workspace), gitHead(workspace)]);
   const now = Date.now();
   const staleMs = runtime.latest ? now - new Date(runtime.latest).getTime() : Number.POSITIVE_INFINITY;
   const isStale = staleMs > 90 * 60 * 1000;
+  const smokeFailed = smokeEntry?.ok === false;
   const derivedStatus =
-    !runtime.latest && taskState.queueDepth === 0
+    smokeFailed
+      ? 'error'
+      : !runtime.latest && taskState.queueDepth === 0
       ? 'offline'
       : isStale && taskState.queueDepth > 0
         ? 'blocked'
         : taskState.status;
   const derivedError =
-    isStale && taskState.queueDepth > 0
+    smokeFailed
+      ? `Runtime smoke failed: ${smokeEntry?.reason || 'unknown error'}`
+      : isStale && taskState.queueDepth > 0
       ? `No agent session update for ${Math.floor(staleMs / 60000)} minutes.`
       : taskState.lastError;
 
@@ -166,6 +199,8 @@ async function buildSnapshot(agentId: string): Promise<HealthSnapshot> {
     runtime: {
       session_count: runtime.count,
       latest_session_update_at: runtime.latest,
+      smoke_ok: smokeEntry?.ok,
+      smoke_checked_at: runtimeSmoke?.updated_at || null,
     },
   };
 }
@@ -195,7 +230,11 @@ export async function readHealthSnapshots(): Promise<HealthSnapshot[]> {
     if (!file.endsWith('.json')) continue;
     try {
       const raw = await fs.readFile(path.join(HEALTH_DIR, file), 'utf8');
-      snapshots.push(JSON.parse(raw) as HealthSnapshot);
+      const parsed = JSON.parse(raw) as Partial<HealthSnapshot>;
+      if (typeof parsed.agent_id !== 'string' || !AGENT_IDS.includes(parsed.agent_id)) {
+        continue;
+      }
+      snapshots.push(parsed as HealthSnapshot);
     } catch {
       // Ignore malformed snapshot files.
     }
