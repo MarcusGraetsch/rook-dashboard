@@ -87,3 +87,16 @@ export const MetricResultSchema = z.object({
 });
 
 export type MetricResult = z.infer<typeof MetricResultSchema>;
+
+// ===== Social / Labor Metrics =====
+
+export const SocialMetricsSchema = z.object({
+  modelId: z.string(),
+  provider: z.string(),
+  laborRating: z.enum(['A', 'B', 'C', 'D', 'F']),
+  dataEthics: z.enum(['A', 'B', 'C', 'D', 'F']),
+  colonialismIndex: z.number().min(0).max(10),
+  clickworkerNotes: z.string(),
+});
+
+export type SocialMetrics = z.infer<typeof SocialMetricsSchema>;

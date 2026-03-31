@@ -25,11 +25,19 @@ interface Task {
   column_id: string
   title: string
   description: string | null
+  column_name?: string | null
   position: number
   priority: 'low' | 'medium' | 'high' | 'urgent'
   labels: string
   assignee: string | null
   due_date: string | null
+  canonical_task_id?: string | null
+  project_id?: string | null
+  related_repo?: string | null
+  github_issue_number?: number | null
+  github_issue_url?: string | null
+  sync_status?: string | null
+  sync_error?: string | null
 }
 
 interface Column {
@@ -82,8 +90,13 @@ export function KanbanBoard() {
       if (res.ok) {
         const data = await res.json()
         setBoards(data)
-        if (data.length > 0 && !activeBoard) {
+        if (data.length === 0) {
+          setActiveBoard(null)
+        } else if (!activeBoard) {
           setActiveBoard(data[0])
+        } else {
+          const refreshedActiveBoard = data.find((board: Board) => board.id === activeBoard.id)
+          setActiveBoard(refreshedActiveBoard || data[0])
         }
       }
     } catch (e) {
@@ -158,10 +171,14 @@ export function KanbanBoard() {
       
       if (res.ok) {
         fetchBoards()
+        return true
       }
     } catch (e) {
       console.error('Failed to update task:', e)
     }
+
+    fetchBoards()
+    return false
   }
 
   async function deleteTask(taskId: string) {
@@ -174,6 +191,22 @@ export function KanbanBoard() {
       }
     } catch (e) {
       console.error('Failed to delete task:', e)
+    }
+  }
+
+  async function archiveTask(taskId: string) {
+    try {
+      const res = await fetch('/api/kanban/archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task_id: taskId }),
+      })
+
+      if (res.ok) {
+        fetchBoards()
+      }
+    } catch (e) {
+      console.error('Failed to archive task:', e)
     }
   }
 
@@ -191,10 +224,77 @@ export function KanbanBoard() {
       
       if (res.ok) {
         fetchBoards()
+        return true
       }
     } catch (e) {
       console.error('Failed to move task:', e)
     }
+
+    fetchBoards()
+    return false
+  }
+
+  function updateBoardState(transform: (board: Board) => Board) {
+    setBoards((currentBoards) => currentBoards.map(transform))
+    setActiveBoard((currentBoard) => (currentBoard ? transform(currentBoard) : currentBoard))
+  }
+
+  function applyTaskMoveLocally(taskId: string, targetColumnId: string, targetPosition: number) {
+    updateBoardState((board) => {
+      const sourceColumn = board.columns.find((column) =>
+        column.tasks.some((task) => task.id === taskId)
+      )
+      const destinationColumn = board.columns.find((column) => column.id === targetColumnId)
+
+      if (!sourceColumn || !destinationColumn) {
+        return board
+      }
+
+      const movingTask = sourceColumn.tasks.find((task) => task.id === taskId)
+      if (!movingTask) {
+        return board
+      }
+
+      const sourceTasks = sourceColumn.tasks
+        .filter((task) => task.id !== taskId)
+        .map((task, index) => ({ ...task, position: index }))
+
+      const destinationBase =
+        sourceColumn.id === destinationColumn.id ? sourceTasks : destinationColumn.tasks
+      const insertAt = Math.max(0, Math.min(targetPosition, destinationBase.length))
+      const destinationTasks = [...destinationBase]
+
+      destinationTasks.splice(insertAt, 0, {
+        ...movingTask,
+        column_id: destinationColumn.id,
+        position: insertAt,
+      })
+
+      const normalizedDestinationTasks = destinationTasks.map((task, index) => ({
+        ...task,
+        column_id: destinationColumn.id,
+        position: index,
+      }))
+
+      return {
+        ...board,
+        columns: board.columns.map((column) => {
+          if (column.id === sourceColumn.id && column.id === destinationColumn.id) {
+            return { ...column, tasks: normalizedDestinationTasks }
+          }
+
+          if (column.id === sourceColumn.id) {
+            return { ...column, tasks: sourceTasks }
+          }
+
+          if (column.id === destinationColumn.id) {
+            return { ...column, tasks: normalizedDestinationTasks }
+          }
+
+          return column
+        }),
+      }
+    })
   }
 
   function handleDragStart(event: DragStartEvent) {
@@ -215,40 +315,59 @@ export function KanbanBoard() {
     const activeTask = findTask(activeId)
     if (!activeTask) return
 
-    // Check if dropping on a column
-    const overColumn = activeBoard?.columns.find(c => c.id === overId)
-    if (overColumn) {
-      const maxPosition = Math.max(...overColumn.tasks.map(t => t.position), -1)
-      moveTask(activeId, overId, maxPosition + 1)
+    // Find over item (could be column or task)
+    const overColumnId = findColumnId(overId)
+    if (!overColumnId) return
+
+    // If dropping on same column and same position, do nothing
+    if (overColumnId === activeTask.column_id) {
+      // Check if it's just a reorder
+      const overTask = findTask(overId)
+      if (overTask && overTask.id !== activeId) {
+        // Same column reorder
+        const column = activeBoard?.columns.find(c => c.id === overColumnId)
+        if (column) {
+          const oldIndex = column.tasks.findIndex(t => t.id === activeId)
+          const newIndex = column.tasks.findIndex(t => t.id === overId)
+          if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+            const newTasks = [...column.tasks]
+            newTasks.splice(oldIndex, 1)
+            newTasks.splice(newIndex, 0, activeTask)
+            applyTaskMoveLocally(activeId, overColumnId, newIndex)
+            newTasks.forEach((task, index) => {
+              if (task.position !== index) {
+                updateTask(task.id, { position: index })
+              }
+            })
+          }
+        }
+      }
       return
     }
 
-    // Check if dropping on another task
-    const overTask = findTask(overId)
-    if (overTask && activeTask.column_id !== overTask.column_id) {
-      // Cross-column drop: put at end of target column
-      const targetColumn = activeBoard?.columns.find(c => c.id === overTask.column_id)
-      const maxPosition = Math.max(...(targetColumn?.tasks.map(t => t.position) || [-1]))
-      moveTask(activeId, overTask.column_id, maxPosition + 1)
-    } else if (overTask && activeId !== overId) {
-      // Reorder within same column
-      const column = activeBoard?.columns.find(c => c.id === activeTask.column_id)
-      if (column) {
-        const oldIndex = column.tasks.findIndex(t => t.id === activeId)
-        const newIndex = column.tasks.findIndex(t => t.id === overId)
-        
-        const newTasks = [...column.tasks]
-        newTasks.splice(oldIndex, 1)
-        newTasks.splice(newIndex, 0, activeTask)
-        
-        // Update positions
-        newTasks.forEach((task, index) => {
-          if (task.position !== index) {
-            updateTask(task.id, { position: index })
-          }
-        })
+    // Cross-column move
+    const targetColumn = activeBoard?.columns.find(c => c.id === overColumnId)
+    if (targetColumn) {
+      const maxPosition = Math.max(...targetColumn.tasks.map(t => t.position), -1)
+      applyTaskMoveLocally(activeId, overColumnId, maxPosition + 1)
+      moveTask(activeId, overColumnId, maxPosition + 1)
+    }
+  }
+
+  function findColumnId(itemId: string): string | null {
+    // Check if it's a column
+    for (const board of boards) {
+      const column = board.columns.find(c => c.id === itemId)
+      if (column) return column.id
+    }
+    // Check if it's a task
+    for (const board of boards) {
+      for (const column of board.columns) {
+        const task = column.tasks.find(t => t.id === itemId)
+        if (task) return column.id
       }
     }
+    return null
   }
 
   function findTask(taskId: string): Task | undefined {
@@ -354,6 +473,7 @@ export function KanbanBoard() {
                     onAddTask={(colId, title, data) => createTask(colId, title, data)}
                     onUpdateTask={(taskId, updates) => updateTask(taskId, updates)}
                     onDeleteTask={(taskId) => deleteTask(taskId)}
+                    onArchiveTask={(taskId) => archiveTask(taskId)}
                   />
                 ))}
             </div>

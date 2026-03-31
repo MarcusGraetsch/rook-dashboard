@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, Board, Column, Task } from '@/lib/db';
+import {
+  archiveKanbanTaskSync,
+  autoSyncKanbanTaskToGithub,
+  reconcileKanbanProjectionFromCanonical,
+  syncKanbanTaskToCanonical,
+} from '@/lib/control/task-sync';
 import { randomUUID } from 'crypto';
 
 // Token-efficient Agent API for Kanban
@@ -18,6 +24,7 @@ export async function GET(request: NextRequest) {
     const listOnly = searchParams.get('list') === '1';
     
     const db = getDb();
+    await reconcileKanbanProjectionFromCanonical(db);
     
     if (listOnly) {
       // Minimal list for agent context - token efficient
@@ -38,6 +45,7 @@ export async function GET(request: NextRequest) {
           (SELECT COUNT(*) FROM subtasks WHERE task_id = t.id AND completed = 1) as subtask_done
         FROM tasks t 
         WHERE t.column_id IN (SELECT id FROM columns WHERE board_id = ?)
+          AND t.archived_at IS NULL
         ORDER BY t.position
       `).all(boardId) as any[];
       
@@ -55,6 +63,13 @@ export async function GET(request: NextRequest) {
             priority: t.priority,
             assignee: t.assignee,
             due_date: t.due_date,
+            canonical_task_id: t.canonical_task_id,
+            project_id: t.project_id,
+            related_repo: t.related_repo,
+            github_issue_number: t.github_issue_number,
+            github_issue_url: t.github_issue_url,
+            sync_status: t.sync_status,
+            sync_error: t.sync_error,
             labels: t.labels ? JSON.parse(t.labels) : [],
             done: t.subtask_done > 0 && t.subtask_done === t.subtask_count && t.subtask_count > 0,
             subtasks: `${t.subtask_done}/${t.subtask_count}`,
@@ -169,7 +184,13 @@ export async function POST(request: NextRequest) {
         (maxPos?.max ?? -1) + 1
       );
       
-      return NextResponse.json({ id, title: title.trim(), status: 'created' });
+      const sync = await syncKanbanTaskToCanonical(db, id);
+      try {
+        await autoSyncKanbanTaskToGithub(db, sync.canonicalTaskId);
+      } catch {
+        // Canonical task is already saved; GitHub sync errors are persisted separately.
+      }
+      return NextResponse.json({ id, title: title.trim(), status: 'created', sync });
     }
     
     if (action === 'update_task') {
@@ -194,15 +215,22 @@ export async function POST(request: NextRequest) {
         db.prepare(`UPDATE tasks SET ${updates.join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(...values);
       }
       
-      return NextResponse.json({ status: 'updated' });
+      const sync = await syncKanbanTaskToCanonical(db, task_id);
+      try {
+        await autoSyncKanbanTaskToGithub(db, sync.canonicalTaskId);
+      } catch {
+        // Canonical task is already saved; GitHub sync errors are persisted separately.
+      }
+      return NextResponse.json({ status: 'updated', sync });
     }
     
     if (action === 'delete_task') {
       const { task_id } = body;
       if (!task_id) return NextResponse.json({ error: 'task_id required' }, { status: 400 });
       
+      const archived = await archiveKanbanTaskSync(db, task_id);
       db.prepare('DELETE FROM tasks WHERE id = ?').run(task_id);
-      return NextResponse.json({ status: 'deleted' });
+      return NextResponse.json({ status: 'deleted', archived });
     }
     
     if (action === 'move_task') {
@@ -215,7 +243,13 @@ export async function POST(request: NextRequest) {
         UPDATE tasks SET column_id = ?, position = ?, updated_at = datetime('now') WHERE id = ?
       `).run(column_id, position ?? 0, task_id);
       
-      return NextResponse.json({ status: 'moved' });
+      const sync = await syncKanbanTaskToCanonical(db, task_id);
+      try {
+        await autoSyncKanbanTaskToGithub(db, sync.canonicalTaskId);
+      } catch {
+        // Canonical task is already saved; GitHub sync errors are persisted separately.
+      }
+      return NextResponse.json({ status: 'moved', sync });
     }
     
     // === SUBTASK OPERATIONS ===

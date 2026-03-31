@@ -1,21 +1,63 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Folder, File } from 'lucide-react'
 
-const memoryFiles = [
-  { path: 'MEMORY.md', size: '4.7KB', modified: '2026-03-27' },
-  { path: 'memory/2026-03-27.md', size: '863B', modified: '2026-03-27' },
-  { path: 'memory/2026-03-26.md', size: '2.1KB', modified: '2026-03-26' },
-  { path: 'memory/2026-03-25.md', size: '1.5KB', modified: '2026-03-25' },
-  { path: 'memory/2026-03-24.md', size: '928B', modified: '2026-03-24' },
-]
+interface MemoryFile {
+  path: string
+  size: string
+  modified: string
+}
+
+interface MemoryResponse {
+  agent: string
+  files: MemoryFile[]
+  memoryContent: string
+}
 
 const agents = ['main', 'coach', 'engineer', 'researcher', 'health']
 
 export default function MemoryPage() {
   const [selectedAgent, setSelectedAgent] = useState('main')
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
+  const [files, setFiles] = useState<MemoryFile[]>([])
+  const [content, setContent] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setSelectedFile(null)
+    setContent('')
+    loadMemory()
+  }, [selectedAgent])
+
+  async function loadMemory() {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/memory?agent=${selectedAgent}`)
+      if (res.ok) {
+        const data: MemoryResponse = await res.json()
+        setFiles(data.files || [])
+        setContent(data.memoryContent || '')
+      }
+    } catch (e) {
+      console.error('Failed to load memory:', e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loadFile(path: string) {
+    try {
+      const res = await fetch(`/api/memory?agent=${selectedAgent}&path=${encodeURIComponent(path)}`)
+      if (res.ok) {
+        const data = await res.json()
+        setContent(data.content || '')
+        setSelectedFile(path)
+      }
+    } catch (e) {
+      console.error('Failed to load file:', e)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -38,61 +80,49 @@ export default function MemoryPage() {
         ))}
       </div>
       
-      <div className="grid grid-cols-3 gap-4">
-        {/* File Tree */}
-        <div className="bg-secondary rounded-lg border border-gray-700 p-4">
-          <h3 className="font-bold mb-3 flex items-center gap-2">
-            <Folder className="w-4 h-4" />
-            Files
-          </h3>
-          <div className="space-y-1">
-            {memoryFiles.map((file) => (
-              <button
-                key={file.path}
-                onClick={() => setSelectedFile(file.path)}
-                className={`w-full text-left px-2 py-1 rounded flex items-center gap-2 ${
-                  selectedFile === file.path ? 'bg-accent' : 'hover:bg-accent/50'
-                }`}
-              >
-                <File className="w-4 h-4 text-gray-400" />
-                <span className="text-sm">{file.path}</span>
-              </button>
-            ))}
+      {loading ? (
+        <p className="text-gray-400">Laden...</p>
+      ) : (
+        <div className="grid grid-cols-3 gap-4">
+          {/* File Tree */}
+          <div className="bg-secondary rounded-lg border border-gray-700 p-4">
+            <h3 className="font-bold mb-3 flex items-center gap-2">
+              <Folder className="w-4 h-4" />
+              Files
+            </h3>
+            <div className="space-y-1">
+              {files.map((file) => (
+                <button
+                  key={file.path}
+                  onClick={() => loadFile(file.path)}
+                  className={`w-full text-left px-2 py-1 rounded flex items-center gap-2 ${
+                    selectedFile === file.path ? 'bg-accent' : 'hover:bg-accent/50'
+                  }`}
+                >
+                  <File className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm">{file.path}</span>
+                  <span className="text-xs text-gray-500 ml-auto">{file.modified}</span>
+                </button>
+              ))}
+              {files.length === 0 && (
+                <p className="text-gray-500 text-sm">Keine Dateien gefunden</p>
+              )}
+            </div>
+          </div>
+          
+          {/* Preview */}
+          <div className="col-span-2 bg-secondary rounded-lg border border-gray-700 p-4">
+            <h3 className="font-bold mb-3">Preview</h3>
+            {content ? (
+              <pre className="text-sm font-mono text-gray-300 overflow-auto max-h-96 whitespace-pre-wrap">
+                {content}
+              </pre>
+            ) : (
+              <p className="text-gray-400">Wähle eine Datei zum Anzeigen</p>
+            )}
           </div>
         </div>
-        
-        {/* Preview */}
-        <div className="col-span-2 bg-secondary rounded-lg border border-gray-700 p-4">
-          <h3 className="font-bold mb-3">Preview</h3>
-          {selectedFile ? (
-            <pre className="text-sm font-mono text-gray-300 overflow-auto max-h-96">
-              {`# MEMORY.md - Long-Term Memory
-
-> Kuratierte Erinnerungen. Destilliert aus täglichen Notizen.
-
----
-
-## Über Marcus
-
-### Key Context
-- **Name:** Marcus Grätsch, Berlin
-- **Job:** Senior Consultant IT Management @ HiSolutions AG
-- **Background:** Politikwissenschaft, Marxistische Theorie
-
-### Preferences
-- Spricht Deutsch, denkt oft auf Englisch
-- "Arm wie eine Kirchenmaus"
-- Musik und Bier als Entspannung
-
----
-
-*Letzte Aktualisierung: 2026-03-27*`}
-            </pre>
-          ) : (
-            <p className="text-gray-400">Select a file to preview</p>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   )
 }

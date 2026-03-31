@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Activity, Cpu, HardDrive, Clock, Users, Zap, RefreshCw, Terminal, Database, Shield } from 'lucide-react'
 import Link from 'next/link'
+import KpiCard from '@/components/dashboard/KpiCard'
 
 interface Session {
   key: string;
@@ -38,6 +39,7 @@ export default function Dashboard() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
   const [stats, setStats] = useState<SystemStats | null>(null)
+  const [defaultModel, setDefaultModel] = useState<string>('MiniMax-M2.5')
   const [loading, setLoading] = useState(true)
   const [gatewayError, setGatewayError] = useState(false)
   const [activities, setActivities] = useState<Activity[]>([])
@@ -54,6 +56,7 @@ export default function Dashboard() {
           const data = await sessionsRes.json()
           setSessions(data.sessions || [])
           setAgents(data.agents || [])
+          setDefaultModel(data.defaultModel || 'MiniMax-M2.5')
           
           // Build activity feed from sessions
           const newActivities: Activity[] = data.sessions
@@ -124,51 +127,32 @@ export default function Dashboard() {
         </div>
       )}
       
-      {/* Stats Grid */}
+      {/* KPI Cards - Real-Time */}
       <div className="grid grid-cols-4 gap-4">
-        <div className="bg-secondary p-4 rounded-lg border border-gray-700">
-          <div className="flex items-center gap-3">
-            <Activity className="text-highlight" />
-            <div>
-              <p className="text-sm text-gray-400">Sessions</p>
-              <p className="text-2xl font-bold">{sessions.length}</p>
-              <p className="text-xs text-gray-500">{activeSessions} aktiv</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-secondary p-4 rounded-lg border border-gray-700">
-          <div className="flex items-center gap-3">
-            <Users className="text-highlight" />
-            <div>
-              <p className="text-sm text-gray-400">Agents</p>
-              <p className="text-2xl font-bold">{agents.length}</p>
-              <p className="text-xs text-gray-500">6 verfügbar</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-secondary p-4 rounded-lg border border-gray-700">
-          <div className="flex items-center gap-3">
-            <Cpu className="text-highlight" />
-            <div>
-              <p className="text-sm text-gray-400">CPU</p>
-              <p className="text-2xl font-bold">{stats?.cpu?.split(' ')[0] || '—'}</p>
-              <p className="text-xs text-gray-500">Load Average</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-secondary p-4 rounded-lg border border-gray-700">
-          <div className="flex items-center gap-3">
-            <HardDrive className="text-highlight" />
-            <div>
-              <p className="text-sm text-gray-400">Memory</p>
-              <p className="text-2xl font-bold">{stats?.memory?.used || '—'}</p>
-              <p className="text-xs text-gray-500">/ {stats?.memory?.total || '?'}</p>
-            </div>
-          </div>
-        </div>
+        <KpiCard
+          label="Sessions"
+          value={sessions.length}
+          icon={<Activity className="w-5 h-5" />}
+          live={true}
+        />
+        <KpiCard
+          label="Agents"
+          value={agents.length}
+          icon={<Users className="w-5 h-5" />}
+        />
+        <KpiCard
+          label="CPU Load"
+          value={stats?.cpu?.split(' ')[0] || '—'}
+          unit={stats?.cpu ? 'load' : undefined}
+          icon={<Cpu className="w-5 h-5" />}
+        />
+        <KpiCard
+          label="Memory"
+          value={stats?.memory?.used || '—'}
+          unit={stats?.memory ? `/${stats.memory.total}` : undefined}
+          icon={<HardDrive className="w-5 h-5" />}
+          live={true}
+        />
       </div>
       
       {/* Main Content Grid */}
@@ -259,7 +243,7 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-gray-400">Model</p>
-              <p>MiniMax-M2.7</p>
+              <p>{defaultModel}</p>
             </div>
             <div>
               <p className="text-gray-400">Uptime</p>

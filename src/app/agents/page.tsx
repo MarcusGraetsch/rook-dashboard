@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Bot, Folder, Shield, Clock, ExternalLink } from 'lucide-react'
+import { Bot, Folder, Shield, Clock } from 'lucide-react'
 
 interface Agent {
   id: string
@@ -10,6 +10,13 @@ interface Agent {
   workspace: string
   sandbox?: boolean
   model?: string
+  sessions?: number
+  tokens?: number
+  healthStatus?: string
+  currentTaskId?: string | null
+  queueDepth?: number
+  lastError?: string | null
+  lastCompletedTask?: string | null
 }
 
 interface Session {
@@ -17,15 +24,42 @@ interface Session {
   displayName: string
   updatedAt: number
   totalTokens: number
+  agent?: string
+  tokens?: number
+}
+
+interface HealthSnapshot {
+  agent_id: string
+  status: 'idle' | 'ready' | 'in_progress' | 'blocked' | 'error' | 'offline'
+  current_task_id: string | null
+  last_seen_at: string
+  workspace: string
+  queue_depth: number
+  last_error: string | null
+  last_completed_task: string | null
+  repo_heads: Record<string, string>
+  runtime: {
+    session_count: number
+    latest_session_update_at: string | null
+  }
 }
 
 const AGENT_COLORS: Record<string, string> = {
-  main: 'from-amber-600 to-orange-700',
+  rook: 'from-amber-600 to-orange-700',
   consultant: 'from-blue-600 to-blue-800',
   coach: 'from-purple-600 to-purple-800',
   engineer: 'from-cyan-600 to-cyan-800',
   researcher: 'from-green-600 to-green-800',
   health: 'from-red-600 to-red-800',
+}
+
+const AGENT_EMOJIS: Record<string, string> = {
+  rook: '🦅',
+  consultant: '💼',
+  coach: '🧠',
+  engineer: '🛠️',
+  researcher: '📚',
+  health: '💪',
 }
 
 export default function AgentsPage() {
@@ -36,10 +70,51 @@ export default function AgentsPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await fetch('/api/gateway/sessions')
-        if (res.ok) {
-          const data = await res.json()
-          setAgents(data.agents || [])
+        const [tokensRes, healthRes] = await Promise.all([
+          fetch('/api/memory/tokens'),
+          fetch('/api/control/health', { method: 'POST' }),
+        ])
+        if (tokensRes.ok) {
+          const data = await tokensRes.json()
+          const healthJson = healthRes.ok ? await healthRes.json() : { snapshots: [] }
+          const healthByAgent: Record<string, HealthSnapshot> = {}
+          ;(healthJson.snapshots || []).forEach((snapshot: HealthSnapshot) => {
+            healthByAgent[snapshot.agent_id] = snapshot
+          })
+          
+          // Build agent list from all agents
+          const allAgents = ['rook', 'consultant', 'coach', 'engineer', 'researcher', 'health']
+          const sessionsByAgent: Record<string, Session[]> = {}
+          
+          // Group sessions by agent
+          data.sessions?.forEach((s: any) => {
+            const agentId = s.agent || 'unknown'
+            if (!sessionsByAgent[agentId]) sessionsByAgent[agentId] = []
+            sessionsByAgent[agentId].push(s)
+          })
+          
+          // Build agent list
+          const agentList: Agent[] = allAgents.map(id => {
+            const agentSessions = sessionsByAgent[id] || []
+            const totalTokens = agentSessions.reduce((sum: number, s: any) => sum + s.tokens, 0)
+            const snapshot = healthByAgent[id]
+            return {
+              id,
+              name: id.charAt(0).toUpperCase() + id.slice(1),
+              emoji: AGENT_EMOJIS[id] || '🤖',
+              workspace: snapshot?.workspace || `/root/.openclaw/workspace-${id}`,
+              sandbox: ['engineer', 'researcher', 'health', 'coach'].includes(id),
+              sessions: agentSessions.length,
+              tokens: totalTokens,
+              healthStatus: snapshot?.status || 'offline',
+              currentTaskId: snapshot?.current_task_id || null,
+              queueDepth: snapshot?.queue_depth || 0,
+              lastError: snapshot?.last_error || null,
+              lastCompletedTask: snapshot?.last_completed_task || null,
+            }
+          })
+          
+          setAgents(agentList)
           setSessions(data.sessions || [])
         }
       } catch (e) {
@@ -55,13 +130,13 @@ export default function AgentsPage() {
   }, [])
 
   function getAgentSessions(agentId: string) {
-    return sessions.filter(s => s.key.includes(`:${agentId}:`))
+    return sessions.filter(s => s.agent === agentId)
   }
 
   function getLastActivity(agentId: string) {
     const agentSessions = getAgentSessions(agentId)
     if (agentSessions.length === 0) return null
-    return Math.max(...agentSessions.map(s => s.updatedAt))
+    return Math.max(...agentSessions.map(s => new Date(s.updatedAt).getTime()))
   }
 
   function formatLastActivity(timestamp: number | null) {
@@ -84,10 +159,10 @@ export default function AgentsPage() {
         <p className="text-gray-400">Laden...</p>
       ) : (
         <div className="grid grid-cols-2 gap-4">
-          {agents.map((agent) => {
+          {agents.filter(a => a.sessions && a.sessions > 0).map((agent) => {
             const agentSessions = getAgentSessions(agent.id)
             const lastActivity = getLastActivity(agent.id)
-            const totalTokens = agentSessions.reduce((sum, s) => sum + s.totalTokens, 0)
+            const totalTokens = agentSessions.reduce((sum, s) => sum + (s.tokens || 0), 0)
             const colorClass = AGENT_COLORS[agent.id] || 'from-gray-600 to-gray-800'
             
             return (
@@ -134,21 +209,35 @@ export default function AgentsPage() {
                     <Bot className="w-4 h-4 text-gray-500" />
                     <div>
                       <p className="text-xs text-gray-400">Sessions</p>
-                      <p className="text-sm">{agentSessions.length} • {totalTokens.toLocaleString()} Tokens</p>
+                      <p className="text-sm">{agent.sessions} • {(agent.tokens || 0).toLocaleString()} Tokens</p>
                     </div>
                   </div>
-                  
-                  {agentSessions.length > 0 && (
-                    <div className="pt-2 border-t border-gray-700">
-                      <p className="text-xs text-gray-500 mb-2">Letzte Sessions</p>
-                      <div className="space-y-1">
-                        {agentSessions.slice(0, 3).map((s, i) => (
-                          <div key={i} className="flex justify-between text-xs">
-                            <span className="text-gray-400">{s.displayName}</span>
-                            <span className="font-mono text-highlight">{s.totalTokens.toLocaleString()}</span>
-                          </div>
-                        ))}
-                      </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${
+                      agent.healthStatus === 'error' ? 'bg-red-400' :
+                      agent.healthStatus === 'blocked' ? 'bg-orange-400' :
+                      agent.healthStatus === 'in_progress' ? 'bg-blue-400' :
+                      agent.healthStatus === 'ready' ? 'bg-cyan-400' :
+                      'bg-gray-500'
+                    }`} />
+                    <div>
+                      <p className="text-xs text-gray-400">Health</p>
+                      <p className="text-sm">{agent.healthStatus} • queue {agent.queueDepth || 0}</p>
+                    </div>
+                  </div>
+
+                  {(agent.currentTaskId || agent.lastCompletedTask || agent.lastError) && (
+                    <div className="text-xs space-y-1">
+                      {agent.currentTaskId && (
+                        <p><span className="text-gray-400">Current:</span> <span className="font-mono">{agent.currentTaskId}</span></p>
+                      )}
+                      {agent.lastCompletedTask && (
+                        <p><span className="text-gray-400">Completed:</span> <span className="font-mono">{agent.lastCompletedTask}</span></p>
+                      )}
+                      {agent.lastError && (
+                        <p className="text-red-300"><span className="text-gray-400">Error:</span> {agent.lastError}</p>
+                      )}
                     </div>
                   )}
                 </div>

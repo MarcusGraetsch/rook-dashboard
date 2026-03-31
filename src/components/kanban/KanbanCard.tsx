@@ -11,11 +11,19 @@ interface Task {
   column_id: string
   title: string
   description: string | null
+  column_name?: string | null
   position: number
   priority: 'low' | 'medium' | 'high' | 'urgent'
   labels: string
   assignee: string | null
   due_date: string | null
+  canonical_task_id?: string | null
+  project_id?: string | null
+  related_repo?: string | null
+  github_issue_number?: number | null
+  github_issue_url?: string | null
+  sync_status?: string | null
+  sync_error?: string | null
   subtask_count?: number
   subtask_done?: number
 }
@@ -25,6 +33,7 @@ interface Props {
   isDragging?: boolean
   onUpdate?: (taskId: string, updates: Partial<Task>) => void
   onDelete?: (taskId: string) => void
+  onArchive?: (taskId: string) => void
 }
 
 const priorityColors = {
@@ -50,7 +59,15 @@ const ASSIGNEE_NAMES: Record<string, string> = {
   consultant: '💼 Consultant',
 }
 
-export function KanbanCard({ task, isDragging, onUpdate, onDelete }: Props) {
+const SYNC_STATUS_CLASSES: Record<string, string> = {
+  synced: 'bg-green-900/50 text-green-300',
+  error: 'bg-red-900/50 text-red-300',
+  not_requested: 'bg-gray-700 text-gray-300',
+  pending: 'bg-amber-900/50 text-amber-300',
+  local_only: 'bg-gray-700 text-gray-300',
+}
+
+export function KanbanCard({ task, isDragging, onUpdate, onDelete, onArchive }: Props) {
   const [showModal, setShowModal] = useState(false)
 
   const {
@@ -78,7 +95,15 @@ export function KanbanCard({ task, isDragging, onUpdate, onDelete }: Props) {
     setShowModal(false)
   }
 
-  const labels = task.labels && task.labels !== '[]' ? JSON.parse(task.labels) : []
+  let labels: string[] = []
+  try {
+    if (task.labels && task.labels !== '[]') {
+      const parsed = JSON.parse(task.labels)
+      labels = Array.isArray(parsed) ? parsed : []
+    }
+  } catch (e) {
+    labels = []
+  }
   const isOverdue = task.due_date && new Date(task.due_date) < new Date()
 
   const priorityBorder = {
@@ -93,17 +118,19 @@ export function KanbanCard({ task, isDragging, onUpdate, onDelete }: Props) {
       <div
         ref={setNodeRef}
         style={style}
+        {...attributes}
+        {...listeners}
         className={`bg-secondary rounded p-3 border border-gray-700 border-l-4 ${priorityBorder} cursor-pointer hover:border-highlight ${
           isDragging ? 'shadow-lg' : ''
-        } ${isSortableDragging ? 'opacity-50' : ''}`}
+        } ${isSortableDragging ? 'opacity-50' : ''} touch-none`}
         onClick={() => setShowModal(true)}
       >
         <div className="flex items-start gap-2">
           <button
-            {...attributes}
-            {...listeners}
             className="mt-1 p-1 hover:bg-accent rounded cursor-grab active:cursor-grabbing"
             onClick={(e) => e.stopPropagation()}
+            type="button"
+            aria-label="Drag ticket"
           >
             <GripVertical className="w-4 h-4 text-gray-500" />
           </button>
@@ -157,6 +184,24 @@ export function KanbanCard({ task, isDragging, onUpdate, onDelete }: Props) {
                     {ASSIGNEE_NAMES[task.assignee] || task.assignee}
                   </span>
                 )}
+
+                {task.github_issue_number ? (
+                  <a
+                    href={task.github_issue_url || undefined}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs px-1.5 py-0.5 rounded bg-slate-800 text-slate-200 hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    GH #{task.github_issue_number}
+                  </a>
+                ) : (
+                  <span
+                    className={`text-xs px-1.5 py-0.5 rounded ${SYNC_STATUS_CLASSES[task.sync_status || 'not_requested'] || SYNC_STATUS_CLASSES.not_requested}`}
+                  >
+                    {task.sync_status === 'error' ? 'GitHub error' : 'GitHub pending'}
+                  </span>
+                )}
                 
                 {/* Subtask Progress */}
                 {task.subtask_count !== undefined && task.subtask_count > 0 && (
@@ -181,6 +226,10 @@ export function KanbanCard({ task, isDragging, onUpdate, onDelete }: Props) {
         onClose={() => setShowModal(false)}
         onSave={handleSave}
         onDelete={handleDelete}
+        onArchive={onArchive ? () => {
+          onArchive(task.id)
+          setShowModal(false)
+        } : undefined}
       />
     </>
   )

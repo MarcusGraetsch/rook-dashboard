@@ -46,6 +46,14 @@ function initSchema() {
       labels TEXT DEFAULT '[]',
       assignee TEXT,
       due_date TEXT,
+      canonical_task_id TEXT,
+      project_id TEXT,
+      related_repo TEXT,
+      github_issue_number INTEGER,
+      github_issue_url TEXT,
+      sync_status TEXT DEFAULT 'local_only',
+      sync_error TEXT,
+      archived_at TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (column_id) REFERENCES columns(id) ON DELETE CASCADE
@@ -61,6 +69,27 @@ function initSchema() {
       FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
     );
   `);
+
+  ensureColumn(database, 'tasks', 'canonical_task_id', 'TEXT');
+  ensureColumn(database, 'tasks', 'project_id', 'TEXT');
+  ensureColumn(database, 'tasks', 'related_repo', 'TEXT');
+  ensureColumn(database, 'tasks', 'github_issue_number', 'INTEGER');
+  ensureColumn(database, 'tasks', 'github_issue_url', 'TEXT');
+  ensureColumn(database, 'tasks', 'sync_status', "TEXT DEFAULT 'local_only'");
+  ensureColumn(database, 'tasks', 'sync_error', 'TEXT');
+  ensureColumn(database, 'tasks', 'archived_at', 'TEXT');
+}
+
+function ensureColumn(
+  database: Database.Database,
+  tableName: string,
+  columnName: string,
+  columnDefinition: string
+) {
+  const columns = database.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === columnName)) {
+    database.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
+  }
 }
 
 export interface Board {
@@ -90,6 +119,14 @@ export interface Task {
   labels: string;
   assignee: string | null;
   due_date: string | null;
+  canonical_task_id?: string | null;
+  project_id?: string | null;
+  related_repo?: string | null;
+  github_issue_number?: number | null;
+  github_issue_url?: string | null;
+  sync_status?: string | null;
+  sync_error?: string | null;
+  archived_at?: string | null;
   created_at: string;
   updated_at: string;
 }
