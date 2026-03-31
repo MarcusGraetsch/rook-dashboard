@@ -151,6 +151,25 @@ function statusToColumnName(status: TaskStatus): string | null {
   }
 }
 
+function blockedStageFallbackColumn(canonicalTask: CanonicalTask): string | null {
+  const executor = String(canonicalTask.dispatch?.executor || '').toLowerCase();
+  if (executor === 'review') return 'Review';
+  if (executor === 'test') return 'Testing';
+  if (executor) return 'In Progress';
+
+  const worker = String(canonicalTask.claimed_by || '').replace(/^dispatcher:/, '').toLowerCase();
+  if (worker === 'review') return 'Review';
+  if (worker === 'test') return 'Testing';
+  if (worker) return 'In Progress';
+
+  const assigned = String(canonicalTask.assigned_agent || '').toLowerCase();
+  if (assigned === 'review') return 'Review';
+  if (assigned === 'test') return 'Testing';
+  if (assigned && assigned !== 'rook') return 'In Progress';
+
+  return 'In Progress';
+}
+
 async function ensureDir(dirPath: string) {
   await fs.mkdir(dirPath, { recursive: true });
 }
@@ -565,6 +584,25 @@ export async function refreshKanbanTaskFromCanonical(
     if (targetColumn) {
       nextColumnId = targetColumn.id;
       nextColumnName = targetColumn.name;
+    }
+  } else if (!targetColumnName && canonicalTask.status === 'blocked') {
+    const fallbackColumnName = blockedStageFallbackColumn(canonicalTask);
+    if (fallbackColumnName && normalizeName(fallbackColumnName) !== normalizeName(current.column_name)) {
+      const fallbackColumn = db.prepare(
+        `
+          SELECT id, name
+          FROM columns
+          WHERE board_id = ?
+            AND lower(name) = lower(?)
+          ORDER BY position
+          LIMIT 1
+        `
+      ).get(current.board_id, fallbackColumnName) as { id: string; name: string } | undefined;
+
+      if (fallbackColumn) {
+        nextColumnId = fallbackColumn.id;
+        nextColumnName = fallbackColumn.name;
+      }
     }
   }
 

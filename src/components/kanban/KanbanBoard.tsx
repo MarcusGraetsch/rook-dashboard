@@ -84,6 +84,14 @@ export function KanbanBoard() {
     fetchBoards()
   }, [])
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      fetchBoards()
+    }, 5000)
+
+    return () => window.clearInterval(timer)
+  }, [])
+
   async function fetchBoards() {
     try {
       const res = await fetch('/api/kanban/boards')

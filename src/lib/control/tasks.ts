@@ -24,15 +24,35 @@ export interface CanonicalTask {
   description: string;
   status: TaskStatus;
   assigned_agent: string;
+  claimed_by?: string | null;
+  blocked_by?: string[];
   priority: TaskPriority;
   dependencies: string[];
   related_repo: string;
   branch: string;
   commits: string[];
+  commit_refs?: string[];
   labels?: string[];
   workflow_stage?: string;
   blocked_reason?: string | null;
   handoff_notes?: string;
+  last_heartbeat?: string | null;
+  failure_reason?: string | null;
+  source_channel?: string | null;
+  artifacts?: string[];
+  dispatch?: {
+    mode?: string | null;
+    executor?: string | null;
+    attempts?: number;
+    launched_at?: string | null;
+    last_checked_at?: string | null;
+    model?: string | null;
+    thinking?: string | null;
+    session_key?: string | null;
+    session_id?: string | null;
+    last_result?: string | null;
+    last_error?: string | null;
+  };
   kanban?: {
     board_id: string;
     board_name: string;
@@ -65,6 +85,7 @@ export interface CanonicalTask {
     updated_at: string;
     started_at: string | null;
     completed_at: string | null;
+    claimed_at?: string | null;
   };
 }
 
