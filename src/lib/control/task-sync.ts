@@ -60,6 +60,15 @@ interface CanonicalSyncResult {
   syncStatus: string;
 }
 
+interface KanbanProjectionRow {
+  id: string;
+  canonical_task_id: string | null;
+  project_id: string | null;
+  board_id: string;
+  column_id: string;
+  position: number;
+}
+
 function safeSlug(input: string): string {
   return input
     .toLowerCase()
@@ -121,6 +130,25 @@ function inferStatus(columnName: string): TaskStatus {
   }
 
   return 'backlog';
+}
+
+function statusToColumnName(status: TaskStatus): string | null {
+  switch (status) {
+    case 'backlog':
+      return 'Backlog';
+    case 'ready':
+      return 'Ready';
+    case 'in_progress':
+      return 'In Progress';
+    case 'testing':
+      return 'Testing';
+    case 'review':
+      return 'Review';
+    case 'done':
+      return 'Done';
+    case 'blocked':
+      return null;
+  }
 }
 
 async function ensureDir(dirPath: string) {
@@ -494,6 +522,52 @@ export async function refreshKanbanTaskFromCanonical(
   db: Database.Database,
   canonicalTask: CanonicalTask
 ): Promise<void> {
+  const current = db.prepare(
+    `
+      SELECT
+        t.id,
+        t.column_id,
+        t.position,
+        c.board_id,
+        c.name as column_name
+      FROM tasks t
+      JOIN columns c ON c.id = t.column_id
+      WHERE t.canonical_task_id = ?
+    `
+  ).get(canonicalTask.task_id) as {
+    id: string;
+    column_id: string;
+    position: number;
+    board_id: string;
+    column_name: string;
+  } | undefined;
+
+  if (!current) {
+    return;
+  }
+
+  const targetColumnName = statusToColumnName(canonicalTask.status);
+  let nextColumnId = current.column_id;
+  let nextColumnName = current.column_name;
+
+  if (targetColumnName && normalizeName(targetColumnName) !== normalizeName(current.column_name)) {
+    const targetColumn = db.prepare(
+      `
+        SELECT id, name
+        FROM columns
+        WHERE board_id = ?
+          AND lower(name) = lower(?)
+        ORDER BY position
+        LIMIT 1
+      `
+    ).get(current.board_id, targetColumnName) as { id: string; name: string } | undefined;
+
+    if (targetColumn) {
+      nextColumnId = targetColumn.id;
+      nextColumnName = targetColumn.name;
+    }
+  }
+
   const githubIssue = canonicalTask.github_issue;
   const syncStatus = githubIssue?.sync_status || 'not_requested';
   const syncError = githubIssue?.last_error || null;
@@ -509,6 +583,7 @@ export async function refreshKanbanTaskFromCanonical(
         github_issue_url = ?,
         sync_status = ?,
         sync_error = ?,
+        column_id = ?,
         updated_at = datetime('now')
       WHERE canonical_task_id = ?
     `
@@ -520,8 +595,94 @@ export async function refreshKanbanTaskFromCanonical(
     githubIssue?.url || null,
     syncStatus,
     syncError,
+    nextColumnId,
     canonicalTask.task_id
   );
+
+  const nextKanban = canonicalTask.kanban
+    ? {
+        ...canonicalTask.kanban,
+        board_id: canonicalTask.kanban.board_id || current.board_id,
+        column_id: nextColumnId,
+        column_name: nextColumnName,
+        task_db_id: canonicalTask.kanban.task_db_id || current.id,
+        position: current.position,
+      }
+    : {
+        board_id: current.board_id,
+        board_name: canonicalTask.kanban?.board_name || 'Rook System',
+        column_id: nextColumnId,
+        column_name: nextColumnName,
+        task_db_id: current.id,
+        position: current.position,
+        sync_origin: 'dashboard-kanban' as const,
+      };
+
+  const changed =
+    !canonicalTask.kanban
+    || canonicalTask.kanban.column_id !== nextKanban.column_id
+    || canonicalTask.kanban.column_name !== nextKanban.column_name
+    || canonicalTask.kanban.task_db_id !== nextKanban.task_db_id
+    || canonicalTask.kanban.position !== nextKanban.position;
+
+  if (changed) {
+    await writeCanonicalTask({
+      ...canonicalTask,
+      kanban: nextKanban,
+      timestamps: {
+        ...canonicalTask.timestamps,
+        updated_at: new Date().toISOString(),
+      },
+    });
+  }
+}
+
+export async function reconcileKanbanProjectionFromCanonical(
+  db: Database.Database
+): Promise<Array<{ canonical_task_id: string; from: string; to: string }>> {
+  const rows = db.prepare(
+    `
+      SELECT
+        t.id,
+        t.canonical_task_id,
+        t.project_id,
+        c.board_id,
+        t.column_id,
+        t.position
+      FROM tasks t
+      JOIN columns c ON c.id = t.column_id
+      WHERE t.archived_at IS NULL
+        AND t.canonical_task_id IS NOT NULL
+    `
+  ).all() as KanbanProjectionRow[];
+
+  const changes: Array<{ canonical_task_id: string; from: string; to: string }> = [];
+
+  for (const row of rows) {
+    if (!row.canonical_task_id || !row.project_id) {
+      continue;
+    }
+
+    const canonicalTask = await readCanonicalTask(row.project_id, row.canonical_task_id);
+    if (!canonicalTask) {
+      continue;
+    }
+
+    const before = canonicalTask.kanban?.column_name || '';
+    await refreshKanbanTaskFromCanonical(db, canonicalTask);
+    const refreshed = await readCanonicalTask(row.project_id, row.canonical_task_id);
+    const after = refreshed?.kanban?.column_name || before;
+
+    if (before !== after) {
+      changes.push({
+        canonical_task_id: row.canonical_task_id,
+        from: before,
+        to: after,
+      });
+    }
+  }
+
+  return changes;
 }
 
 export async function autoSyncKanbanTaskToGithub(

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, Board, Column, Task } from '@/lib/db';
+import { reconcileKanbanProjectionFromCanonical } from '@/lib/control/task-sync';
 import { randomUUID } from 'crypto';
 
 function generateId() {
@@ -10,6 +11,7 @@ function generateId() {
 export async function GET() {
   try {
     const db = getDb();
+    await reconcileKanbanProjectionFromCanonical(db);
     
     const boards = db.prepare('SELECT * FROM boards ORDER BY created_at DESC').all() as Board[];
     const columns = db.prepare('SELECT * FROM columns ORDER BY position').all() as Column[];
