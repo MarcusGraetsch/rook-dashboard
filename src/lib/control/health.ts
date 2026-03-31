@@ -2,27 +2,26 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import Database from 'better-sqlite3';
+import { getCanonicalTasks, type CanonicalTask } from '@/lib/control/tasks';
 
 const execFileAsync = promisify(execFile);
 
 const OPERATIONS_DIR =
   process.env.ROOK_OPERATIONS_DIR || '/root/.openclaw/workspace/operations';
 const HEALTH_DIR = path.join(OPERATIONS_DIR, 'health');
-const KANBAN_DB =
-  process.env.ROOK_KANBAN_DB ||
-  '/root/.openclaw/workspace/engineering/rook-dashboard/data/kanban.db';
 
 const AGENT_WORKSPACES: Record<string, string> = {
   rook: '/root/.openclaw/workspace',
   engineer: '/root/.openclaw/workspace-engineer',
   researcher: '/root/.openclaw/workspace-researcher',
+  test: '/root/.openclaw/workspace-test',
+  review: '/root/.openclaw/workspace-review',
   coach: '/root/.openclaw/workspace-coach',
   health: '/root/.openclaw/workspace-health',
   consultant: '/root/.openclaw/workspace-consultant',
 };
 
-const AGENT_IDS = ['rook', 'engineer', 'researcher', 'coach', 'health', 'consultant'];
+const AGENT_IDS = ['rook', 'engineer', 'researcher', 'test', 'review', 'coach', 'health', 'consultant'];
 
 export function getTrackedAgentIds() {
   return [...AGENT_IDS];
@@ -103,51 +102,32 @@ async function gitRemote(workspace: string): Promise<string | null> {
   }
 }
 
-function readKanbanTasks() {
-  try {
-    const db = new Database(KANBAN_DB, { readonly: true });
-    const rows = db.prepare(`
-      SELECT
-        t.canonical_task_id,
-        t.sync_error,
-        t.assignee,
-        c.name as column_name
-      FROM tasks t
-      JOIN columns c ON c.id = t.column_id
-      WHERE t.archived_at IS NULL
-    `).all() as Array<{
-      canonical_task_id: string | null;
-      sync_error: string | null;
-      assignee: string | null;
-      column_name: string;
-    }>;
-    db.close();
-    return rows;
-  } catch {
-    return [];
-  }
-}
-
-function deriveStatus(agentId: string, tasks: ReturnType<typeof readKanbanTasks>) {
-  const assigned = tasks.filter((task) => task.assignee === agentId);
-  const inProgress = assigned.filter((task) => task.column_name.toLowerCase() === 'in progress');
-  const ready = assigned.filter((task) => task.column_name.toLowerCase() === 'ready');
-  const blocked = assigned.filter((task) => task.column_name.toLowerCase() === 'blocked');
-  const done = assigned.filter((task) => task.column_name.toLowerCase() === 'done');
-  const currentTask = inProgress[0]?.canonical_task_id || null;
-  const lastCompleted = done[0]?.canonical_task_id || null;
-  const lastError = assigned.find((task) => task.sync_error)?.sync_error || null;
+function deriveStatus(agentId: string, tasks: CanonicalTask[]) {
+  const assigned = tasks.filter((task) => task.assigned_agent === agentId);
+  const inProgress = assigned.filter((task) => task.status === 'in_progress');
+  const ready = assigned.filter((task) => task.status === 'ready');
+  const blocked = assigned.filter((task) => task.status === 'blocked');
+  const testing = assigned.filter((task) => task.status === 'testing');
+  const review = assigned.filter((task) => task.status === 'review');
+  const done = assigned.filter((task) => task.status === 'done');
+  const currentTask =
+    inProgress[0]?.task_id || testing[0]?.task_id || review[0]?.task_id || null;
+  const lastCompleted = done[0]?.task_id || null;
+  const lastError =
+    assigned.find((task) => task.failure_reason)?.failure_reason ||
+    assigned.find((task) => task.github_issue?.last_error)?.github_issue?.last_error ||
+    null;
 
   let status: HealthSnapshot['status'] = 'idle';
   if (lastError) status = 'error';
   else if (blocked.length > 0) status = 'blocked';
-  else if (inProgress.length > 0) status = 'in_progress';
+  else if (inProgress.length > 0 || testing.length > 0 || review.length > 0) status = 'in_progress';
   else if (ready.length > 0) status = 'ready';
 
   return {
     status,
     currentTask,
-    queueDepth: ready.length + inProgress.length + blocked.length,
+    queueDepth: ready.length + inProgress.length + blocked.length + testing.length + review.length,
     lastCompleted,
     lastError,
   };
@@ -156,18 +136,31 @@ function deriveStatus(agentId: string, tasks: ReturnType<typeof readKanbanTasks>
 async function buildSnapshot(agentId: string): Promise<HealthSnapshot> {
   const workspace = AGENT_WORKSPACES[agentId] || `/root/.openclaw/workspace-${agentId}`;
   const runtime = await latestSessionUpdate(agentId);
-  const tasks = readKanbanTasks();
+  const tasks = await getCanonicalTasks();
   const taskState = deriveStatus(agentId, tasks);
   const [remote, head] = await Promise.all([gitRemote(workspace), gitHead(workspace)]);
+  const now = Date.now();
+  const staleMs = runtime.latest ? now - new Date(runtime.latest).getTime() : Number.POSITIVE_INFINITY;
+  const isStale = staleMs > 90 * 60 * 1000;
+  const derivedStatus =
+    !runtime.latest && taskState.queueDepth === 0
+      ? 'offline'
+      : isStale && taskState.queueDepth > 0
+        ? 'blocked'
+        : taskState.status;
+  const derivedError =
+    isStale && taskState.queueDepth > 0
+      ? `No agent session update for ${Math.floor(staleMs / 60000)} minutes.`
+      : taskState.lastError;
 
   return {
     agent_id: agentId,
-    status: taskState.status,
+    status: derivedStatus,
     current_task_id: taskState.currentTask,
     last_seen_at: runtime.latest || new Date().toISOString(),
     workspace,
     queue_depth: taskState.queueDepth,
-    last_error: taskState.lastError,
+    last_error: derivedError,
     last_completed_task: taskState.lastCompleted,
     repo_heads: remote && head ? { [remote]: head } : {},
     runtime: {

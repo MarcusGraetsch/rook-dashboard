@@ -90,6 +90,8 @@ function coerceAgent(assignee: string | null): CanonicalTask['assigned_agent'] {
     case 'rook':
     case 'engineer':
     case 'researcher':
+    case 'test':
+    case 'review':
     case 'consultant':
     case 'coach':
     case 'health':
@@ -286,11 +288,14 @@ export async function syncKanbanTaskToCanonical(
       `Mirrored from Kanban board "${task.board_name}" column "${task.column_name}".`,
     status,
     assigned_agent: assignedAgent,
+    claimed_by: existing?.claimed_by || null,
     priority: task.priority || existing?.priority || 'medium',
     dependencies: existing?.dependencies || [],
+    blocked_by: existing?.blocked_by || [],
     related_repo: project.related_repo,
     branch: existing?.branch || buildBranch(canonicalTaskId, assignedAgent, task.title),
     commits: existing?.commits || [],
+    commit_refs: existing?.commit_refs || existing?.commits || [],
     labels,
     workflow_stage: existing?.workflow_stage || 'kanban-sync',
     blocked_reason:
@@ -298,6 +303,10 @@ export async function syncKanbanTaskToCanonical(
         ? existing?.blocked_reason || 'Blocked in Kanban column.'
         : existing?.blocked_reason || null,
     handoff_notes: existing?.handoff_notes || '',
+    last_heartbeat: existing?.last_heartbeat || null,
+    failure_reason: existing?.failure_reason || null,
+    source_channel: existing?.source_channel || null,
+    artifacts: existing?.artifacts || [],
     kanban: {
       board_id: task.board_id,
       board_name: task.board_name,
@@ -316,7 +325,10 @@ export async function syncKanbanTaskToCanonical(
       last_synced_at: null,
       last_error: null,
     },
-    timestamps: nextTimestamps(existing, status, nowIso),
+    timestamps: {
+      ...nextTimestamps(existing, status, nowIso),
+      claimed_at: existing?.timestamps.claimed_at || null,
+    },
   };
 
   await writeCanonicalTask(canonicalTask);
