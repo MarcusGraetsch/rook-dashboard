@@ -38,6 +38,11 @@ interface Task {
   github_issue_url?: string | null
   sync_status?: string | null
   sync_error?: string | null
+  canonical_status?: string | null
+  canonical_assigned_agent?: string | null
+  claimed_by?: string | null
+  current_worker?: string | null
+  pipeline_state?: 'running' | 'idle' | 'done' | 'blocked' | string | null
 }
 
 interface Column {
@@ -82,6 +87,14 @@ export function KanbanBoard() {
 
   useEffect(() => {
     fetchBoards()
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      fetchBoards()
+    }, 5000)
+
+    return () => window.clearInterval(timer)
   }, [])
 
   async function fetchBoards() {

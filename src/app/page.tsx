@@ -51,11 +51,17 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function fetchData() {
-      // Date range filter would be applied here - for now just fetch all
-      // The filter can be passed as query params to the API
       try {
+        // Build query params from date range
+        const params = new URLSearchParams();
+        if (dateRange.from) params.set('from', dateRange.from.toISOString());
+        if (dateRange.to) params.set('to', dateRange.to.toISOString());
+        
+        const queryString = params.toString();
+        const sessionsUrl = queryString ? `/api/gateway/sessions?${queryString}` : '/api/gateway/sessions';
+        
         const [sessionsRes, statsRes] = await Promise.all([
-          fetch('/api/gateway/sessions'),
+          fetch(sessionsUrl),
           fetch('/api/gateway/stats'),
         ])
         
@@ -93,7 +99,7 @@ export default function Dashboard() {
     fetchData()
     const interval = setInterval(fetchData, 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [dateRange])
 
   const activeSessions = sessions.filter(s => 
     Date.now() - s.updatedAt < 5 * 60 * 1000

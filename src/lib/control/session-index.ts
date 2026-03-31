@@ -109,8 +109,10 @@ function readSessionFile(agent: string, filePath: string): IndexedSession | null
   };
 }
 
-export function getIndexedSessions(limit = 100): IndexedSession[] {
+export function getIndexedSessions(limit = 100, from?: string | null, to?: string | null): IndexedSession[] {
   const sessions: IndexedSession[] = [];
+  const fromTime = from ? new Date(from).getTime() : 0;
+  const toTime = to ? new Date(to).getTime() : Date.now();
 
   for (const agent of Object.keys(AGENT_META)) {
     const dir = `/root/.openclaw/agents/${agent}/sessions`;
@@ -127,6 +129,7 @@ export function getIndexedSessions(limit = 100): IndexedSession[] {
   }
 
   return sessions
+    .filter(s => s.updatedAt >= fromTime && s.updatedAt <= toTime)
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, limit);
 }

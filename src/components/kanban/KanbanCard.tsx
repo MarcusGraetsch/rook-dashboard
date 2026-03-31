@@ -26,6 +26,11 @@ interface Task {
   sync_error?: string | null
   subtask_count?: number
   subtask_done?: number
+  canonical_status?: string | null
+  canonical_assigned_agent?: string | null
+  claimed_by?: string | null
+  current_worker?: string | null
+  pipeline_state?: 'running' | 'idle' | 'done' | 'blocked' | string | null
 }
 
 interface Props {
@@ -55,6 +60,8 @@ const ASSIGNEE_NAMES: Record<string, string> = {
   coach: '🧠 Coach',
   engineer: '🛠️ Engineer',
   researcher: '📚 Researcher',
+  test: '🧪 Test',
+  review: '🔍 Review',
   health: '💪 Health',
   consultant: '💼 Consultant',
 }
@@ -112,6 +119,34 @@ export function KanbanCard({ task, isDragging, onUpdate, onDelete, onArchive }: 
     high: 'border-l-orange-500',
     urgent: 'border-l-red-500',
   }[task.priority]
+
+  const runtimeBadge = (() => {
+    if (task.pipeline_state === 'running' && task.current_worker) {
+      return {
+        className: 'bg-emerald-900/50 text-emerald-300',
+        text: `Running: ${ASSIGNEE_NAMES[task.current_worker] || task.current_worker}`,
+      }
+    }
+
+    if (task.pipeline_state === 'blocked') {
+      return {
+        className: 'bg-red-900/50 text-red-300',
+        text: 'Pipeline blocked',
+      }
+    }
+
+    if (task.pipeline_state === 'done') {
+      return {
+        className: 'bg-sky-900/50 text-sky-300',
+        text: 'Pipeline complete',
+      }
+    }
+
+    return {
+      className: 'bg-gray-700 text-gray-300',
+      text: 'Pipeline idle',
+    }
+  })()
 
   return (
     <>
@@ -182,6 +217,16 @@ export function KanbanCard({ task, isDragging, onUpdate, onDelete, onArchive }: 
                 {task.assignee && (
                   <span className="text-xs bg-accent px-1.5 py-0.5 rounded">
                     {ASSIGNEE_NAMES[task.assignee] || task.assignee}
+                  </span>
+                )}
+
+                <span className={`text-xs px-1.5 py-0.5 rounded ${runtimeBadge.className}`}>
+                  {runtimeBadge.text}
+                </span>
+
+                {task.canonical_assigned_agent && (
+                  <span className="text-xs bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded">
+                    Stage owner: {ASSIGNEE_NAMES[task.canonical_assigned_agent] || task.canonical_assigned_agent}
                   </span>
                 )}
 

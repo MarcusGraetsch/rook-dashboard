@@ -40,6 +40,19 @@ export interface CanonicalTask {
   failure_reason?: string | null;
   source_channel?: string | null;
   artifacts?: string[];
+  dispatch?: {
+    mode?: string | null;
+    executor?: string | null;
+    attempts?: number;
+    launched_at?: string | null;
+    last_checked_at?: string | null;
+    model?: string | null;
+    thinking?: string | null;
+    session_key?: string | null;
+    session_id?: string | null;
+    last_result?: string | null;
+    last_error?: string | null;
+  };
   kanban?: {
     board_id: string;
     board_name: string;

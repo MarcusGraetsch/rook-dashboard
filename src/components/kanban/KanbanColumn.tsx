@@ -27,6 +27,11 @@ interface Task {
   sync_error?: string | null
   subtask_count?: number
   subtask_done?: number
+  canonical_status?: string | null
+  canonical_assigned_agent?: string | null
+  claimed_by?: string | null
+  current_worker?: string | null
+  pipeline_state?: 'running' | 'idle' | 'done' | 'blocked' | string | null
 }
 
 interface Column {

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, Board, Column, Task } from '@/lib/db';
+import { reconcileKanbanProjectionFromCanonical } from '@/lib/control/task-sync';
+import { getCanonicalTask } from '@/lib/control/tasks';
 import { randomUUID } from 'crypto';
 
 function generateId() {
@@ -10,6 +12,7 @@ function generateId() {
 export async function GET() {
   try {
     const db = getDb();
+    await reconcileKanbanProjectionFromCanonical(db);
     
     const boards = db.prepare('SELECT * FROM boards ORDER BY created_at DESC').all() as Board[];
     const columns = db.prepare('SELECT * FROM columns ORDER BY position').all() as Column[];
@@ -22,6 +25,18 @@ export async function GET() {
       WHERE t.archived_at IS NULL
       ORDER BY t.position
     `).all() as any[];
+
+    const taskIds = Array.from(
+      new Set(
+        tasks
+          .map((task: any) => task.canonical_task_id)
+          .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0)
+      )
+    );
+    const canonicalEntries = await Promise.all(
+      taskIds.map(async (taskId) => [taskId, await getCanonicalTask(taskId)] as const)
+    );
+    const canonicalById = new Map(canonicalEntries);
     
     // Group by board
     const result = boards.map((board: Board) => ({
@@ -30,29 +45,47 @@ export async function GET() {
         .filter((col: Column) => col.board_id === board.id)
         .map((col: Column) => ({
           ...col,
-          tasks: tasks.filter((task: any) => task.column_id === col.id).map((task: any) => ({
-            id: task.id,
-            column_id: task.column_id,
-            title: task.title,
-            description: task.description,
-            position: task.position,
-            priority: task.priority,
-            labels: task.labels,
-            assignee: task.assignee,
-            due_date: task.due_date,
-            column_name: col.name,
-            canonical_task_id: task.canonical_task_id,
-            project_id: task.project_id,
-            related_repo: task.related_repo,
-            github_issue_number: task.github_issue_number,
-            github_issue_url: task.github_issue_url,
-            sync_status: task.sync_status,
-            sync_error: task.sync_error,
-            created_at: task.created_at,
-            updated_at: task.updated_at,
-            subtask_count: task.subtask_count || 0,
-            subtask_done: task.subtask_done || 0,
-          }))
+          tasks: tasks.filter((task: any) => task.column_id === col.id).map((task: any) => {
+            const canonical = task.canonical_task_id ? canonicalById.get(task.canonical_task_id) : null;
+            const claimedBy = canonical?.claimed_by || null;
+            const currentWorker = claimedBy?.startsWith('dispatcher:')
+              ? claimedBy.replace(/^dispatcher:/, '')
+              : null;
+            const pipelineState = claimedBy
+              ? 'running'
+              : canonical?.status && ['done', 'blocked'].includes(canonical.status)
+                ? canonical.status
+                : 'idle';
+
+            return {
+              id: task.id,
+              column_id: task.column_id,
+              title: task.title,
+              description: task.description,
+              position: task.position,
+              priority: task.priority,
+              labels: task.labels,
+              assignee: task.assignee,
+              due_date: task.due_date,
+              column_name: col.name,
+              canonical_task_id: task.canonical_task_id,
+              project_id: task.project_id,
+              related_repo: task.related_repo,
+              github_issue_number: task.github_issue_number,
+              github_issue_url: task.github_issue_url,
+              sync_status: task.sync_status,
+              sync_error: task.sync_error,
+              created_at: task.created_at,
+              updated_at: task.updated_at,
+              subtask_count: task.subtask_count || 0,
+              subtask_done: task.subtask_done || 0,
+              canonical_status: canonical?.status || null,
+              canonical_assigned_agent: canonical?.assigned_agent || null,
+              claimed_by: claimedBy,
+              current_worker: currentWorker,
+              pipeline_state: pipelineState,
+            };
+          })
         }))
     }));
     

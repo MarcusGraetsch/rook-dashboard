@@ -3,6 +3,7 @@ import { getDb, Board, Column, Task } from '@/lib/db';
 import {
   archiveKanbanTaskSync,
   autoSyncKanbanTaskToGithub,
+  reconcileKanbanProjectionFromCanonical,
   syncKanbanTaskToCanonical,
 } from '@/lib/control/task-sync';
 import { randomUUID } from 'crypto';
@@ -23,6 +24,7 @@ export async function GET(request: NextRequest) {
     const listOnly = searchParams.get('list') === '1';
     
     const db = getDb();
+    await reconcileKanbanProjectionFromCanonical(db);
     
     if (listOnly) {
       // Minimal list for agent context - token efficient
