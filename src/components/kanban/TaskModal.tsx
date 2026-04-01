@@ -34,8 +34,13 @@ interface Task {
   pr_state?: 'open' | 'closed' | 'merged' | null
   pr_number?: number | null
   test_status?: 'passed' | 'failed' | null
+  test_commands?: string[]
+  test_summary?: string | null
   review_verdict?: 'approved' | 'changes_requested' | null
+  review_summary?: string | null
   has_handoff_notes?: boolean
+  handoff_notes?: string | null
+  failure_reason?: string | null
 }
 
 interface ProjectOption {
@@ -780,6 +785,22 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
                 </div>
               </div>
 
+              {task.failure_reason && (
+                <div className="rounded border border-red-900/50 bg-red-950/20 px-3 py-3 text-sm">
+                  <p className="text-red-300 font-medium">Failure Reason</p>
+                  <p className="mt-1 text-red-200">{task.failure_reason}</p>
+                </div>
+              )}
+
+              {task.handoff_notes && (
+                <div className="text-sm space-y-2">
+                  <p className="text-gray-500">Engineer Handoff Notes</p>
+                  <div className="rounded border border-gray-700 px-3 py-3 text-gray-200 whitespace-pre-wrap">
+                    {task.handoff_notes}
+                  </div>
+                </div>
+              )}
+
               <div className="text-sm">
                 <p className="text-gray-500">GitHub Issue</p>
                 {task.github_issue_number ? (
@@ -866,6 +887,40 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
                       : 'No commits recorded for this branch yet.'}
                   </p>
                 )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-sm space-y-2">
+                  <p className="text-gray-500">Test Evidence</p>
+                  {task.test_summary ? (
+                    <div className="rounded border border-gray-700 px-3 py-3 text-gray-200 whitespace-pre-wrap">
+                      {task.test_summary}
+                    </div>
+                  ) : (
+                    <p className="text-gray-300">No test summary recorded.</p>
+                  )}
+                  {task.test_commands && task.test_commands.length > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-gray-500">Recorded Commands</p>
+                      {task.test_commands.map((command, index) => (
+                        <div key={`${index}-${command}`} className="rounded border border-gray-700 px-3 py-2 font-mono text-xs text-gray-200 break-all">
+                          {command}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="text-sm space-y-2">
+                  <p className="text-gray-500">Review Evidence</p>
+                  {task.review_summary ? (
+                    <div className="rounded border border-gray-700 px-3 py-3 text-gray-200 whitespace-pre-wrap">
+                      {task.review_summary}
+                    </div>
+                  ) : (
+                    <p className="text-gray-300">No review summary recorded.</p>
+                  )}
+                </div>
               </div>
             </div>
           )}
