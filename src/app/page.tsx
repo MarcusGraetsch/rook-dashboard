@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Activity, Cpu, HardDrive, Clock, Users, Zap, RefreshCw, Terminal, Database, Shield, Filter } from 'lucide-react'
+import { Activity, Cpu, HardDrive, Clock, Users, Zap, RefreshCw, Terminal, Database, Shield } from 'lucide-react'
 import Link from 'next/link'
 import KpiCard from '@/components/dashboard/KpiCard'
 import DateRangePicker, { DateRange } from '@/components/dashboard/DateRangePicker'
@@ -36,6 +36,26 @@ interface Activity {
   time: Date
 }
 
+interface RuntimeBackupStatus {
+  timer: {
+    active_state: string | null
+    sub_state: string | null
+    unit_file_state: string | null
+    next_run_at: string | null
+    last_trigger_at: string | null
+  }
+  latest_snapshot: {
+    id: string
+    path: string
+    created_at: string
+    size: string | null
+    includes_dashboard_db: boolean
+    includes_task_archive: boolean
+    includes_runtime_archive: boolean
+    gdrive_remote: string | null
+  } | null
+}
+
 export default function Dashboard() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
@@ -44,6 +64,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [gatewayError, setGatewayError] = useState(false)
   const [activities, setActivities] = useState<Activity[]>([])
+  const [backupStatus, setBackupStatus] = useState<RuntimeBackupStatus | null>(null)
   const [dateRange, setDateRange] = useState<DateRange>({
     from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
     to: new Date()
@@ -60,9 +81,10 @@ export default function Dashboard() {
         const queryString = params.toString();
         const sessionsUrl = queryString ? `/api/gateway/sessions?${queryString}` : '/api/gateway/sessions';
         
-        const [sessionsRes, statsRes] = await Promise.all([
+        const [sessionsRes, statsRes, backupRes] = await Promise.all([
           fetch(sessionsUrl),
           fetch('/api/gateway/stats'),
+          fetch('/api/control/backup'),
         ])
         
         if (sessionsRes.ok) {
@@ -88,6 +110,11 @@ export default function Dashboard() {
           const statsData = await statsRes.json()
           setStats(statsData)
         }
+
+        if (backupRes.ok) {
+          const backupJson = await backupRes.json()
+          setBackupStatus(backupJson.backup || null)
+        }
       } catch (e) {
         console.error('Failed to fetch data:', e)
         setGatewayError(true)
@@ -104,6 +131,11 @@ export default function Dashboard() {
   const activeSessions = sessions.filter(s => 
     Date.now() - s.updatedAt < 5 * 60 * 1000
   ).length
+  const latestBackup = backupStatus?.latest_snapshot || null
+  const backupHealthy =
+    latestBackup?.includes_dashboard_db &&
+    latestBackup?.includes_task_archive &&
+    latestBackup?.includes_runtime_archive
 
   return (
     <div className="space-y-6">
@@ -293,6 +325,70 @@ export default function Dashboard() {
           <p className="text-2xl font-bold text-highlight">3</p>
           <p className="text-sm text-gray-400">Aktiv</p>
         </Link>
+      </div>
+
+      <div className="bg-secondary p-6 rounded-lg border border-gray-700">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold flex items-center gap-2">
+            <Shield className="w-5 h-5 text-highlight" />
+            Runtime Backup
+          </h3>
+          <span className={`text-xs px-2 py-1 rounded ${
+            backupStatus?.timer.active_state === 'active' ? 'bg-green-900/50 text-green-300' : 'bg-red-900/50 text-red-300'
+          }`}>
+            {backupStatus?.timer.active_state === 'active' ? 'Timer active' : 'Timer missing'}
+          </span>
+        </div>
+
+        {!backupStatus ? (
+          <p className="text-gray-400 text-sm">Backup status unavailable.</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="text-gray-400">Latest snapshot</p>
+                <p className="font-medium">{latestBackup?.id || 'No snapshot yet'}</p>
+              </div>
+              <div>
+                <p className="text-gray-400">Next run</p>
+                <p>{backupStatus.timer.next_run_at || 'Unknown'}</p>
+              </div>
+              <div>
+                <p className="text-gray-400">Last trigger</p>
+                <p>{backupStatus.timer.last_trigger_at || 'Unknown'}</p>
+              </div>
+              <div>
+                <p className="text-gray-400">Remote</p>
+                <p className="break-all">{latestBackup?.gdrive_remote || 'Not recorded'}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="text-gray-400">Snapshot health</p>
+                <p className={backupHealthy ? 'text-green-300 font-medium' : 'text-orange-300 font-medium'}>
+                  {backupHealthy ? 'Dashboard DB + task archives present' : 'Snapshot incomplete'}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-400">Contents</p>
+                <div className="space-y-1">
+                  <p>{latestBackup?.includes_dashboard_db ? '• Dashboard DB included' : '• Dashboard DB missing'}</p>
+                  <p>{latestBackup?.includes_task_archive ? '• Canonical tasks included' : '• Canonical tasks missing'}</p>
+                  <p>{latestBackup?.includes_runtime_archive ? '• Health/log archive included' : '• Health/log archive missing'}</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-gray-400">Local path</p>
+                <p className="break-all">{latestBackup?.path || 'Unknown'}</p>
+              </div>
+              <div>
+                <p className="text-gray-400">Recorded size</p>
+                <p>{latestBackup?.size || 'Unknown'}</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
