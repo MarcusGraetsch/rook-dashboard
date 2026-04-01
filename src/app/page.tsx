@@ -54,6 +54,17 @@ interface RuntimeBackupStatus {
     includes_runtime_archive: boolean
     gdrive_remote: string | null
   } | null
+  collections: Array<{
+    key: string
+    label: string
+    path: string
+    kind: 'runtime' | 'legacy'
+    latest_entry: string | null
+    latest_entry_path: string | null
+    latest_entry_created_at: string | null
+    exists: boolean
+    notes: string | null
+  }>
 }
 
 export default function Dashboard() {
@@ -389,6 +400,30 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        {backupStatus?.collections?.length ? (
+          <div className="mt-6 border-t border-gray-700 pt-4">
+            <h4 className="font-medium mb-3">Backup Collections</h4>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              {backupStatus.collections.map((collection) => (
+                <div key={collection.key} className="rounded-lg border border-gray-700 p-4 bg-accent/20">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <p className="font-medium">{collection.label}</p>
+                    <span className={`text-xs px-2 py-1 rounded ${
+                      collection.exists ? 'bg-green-900/50 text-green-300' : 'bg-orange-900/50 text-orange-300'
+                    }`}>
+                      {collection.exists ? 'Snapshots found' : 'No local snapshot'}
+                    </span>
+                  </div>
+                  <p className="text-gray-400 break-all">{collection.path}</p>
+                  <p className="mt-2">{collection.latest_entry || 'No backup entry detected yet'}</p>
+                  <p className="text-gray-500">{collection.latest_entry_created_at || 'No timestamp available'}</p>
+                  {collection.notes && <p className="mt-2 text-gray-400">{collection.notes}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   )
