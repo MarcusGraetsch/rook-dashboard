@@ -15,6 +15,17 @@ function generateId() {
   return randomUUID();
 }
 
+const DEFAULT_WORKFLOW_COLUMNS = [
+  { name: 'Backlog', color: '#52525b', position: 0 },
+  { name: 'Intake', color: '#1d4ed8', position: 1 },
+  { name: 'Ready', color: '#0f766e', position: 2 },
+  { name: 'In Progress', color: '#3b82f6', position: 3 },
+  { name: 'Testing', color: '#7c3aed', position: 4 },
+  { name: 'Review', color: '#c2410c', position: 5 },
+  { name: 'Blocked', color: '#b91c1c', position: 6 },
+  { name: 'Done', color: '#22c55e', position: 7 },
+];
+
 // GET /api/kanban/agent?board=xxx&compact=1
 // Returns board representation for agent context
 export async function GET(request: NextRequest) {
@@ -110,13 +121,7 @@ export async function POST(request: NextRequest) {
       db.prepare('INSERT INTO boards (id, name, description) VALUES (?, ?, ?)').run(id, name.trim(), description || null);
       
       // Create default columns
-      const defaultColumns = [
-        { name: 'To Do', color: '#6b7280', position: 0 },
-        { name: 'In Progress', color: '#3b82f6', position: 1 },
-        { name: 'Done', color: '#22c55e', position: 2 },
-      ];
-      
-      for (const col of defaultColumns) {
+      for (const col of DEFAULT_WORKFLOW_COLUMNS) {
         db.prepare('INSERT INTO columns (id, board_id, name, position, color) VALUES (?, ?, ?, ?, ?)').run(
           generateId(), id, col.name, col.position, col.color
         );

@@ -32,6 +32,10 @@ interface KanbanTaskContext {
   column_id: string;
   title: string;
   description: string | null;
+  intake_brief: string | null;
+  refinement_source: string | null;
+  refinement_summary: string | null;
+  refined_at: string | null;
   position: number;
   priority: TaskPriority;
   labels: string;
@@ -49,6 +53,12 @@ interface KanbanTaskContext {
   board_id: string;
   board_name: string;
   column_name: string;
+}
+
+interface KanbanChecklistItem {
+  title: string;
+  completed: number;
+  position: number;
 }
 
 interface CanonicalSyncResult {
@@ -99,6 +109,8 @@ function coerceAgent(assignee: string | null): CanonicalTask['assigned_agent'] {
     case 'rook':
     case 'engineer':
     case 'researcher':
+    case 'test':
+    case 'review':
     case 'consultant':
     case 'coach':
     case 'health':
@@ -112,6 +124,7 @@ function coerceAgent(assignee: string | null): CanonicalTask['assigned_agent'] {
 function inferStatus(columnName: string): TaskStatus {
   const value = normalizeName(columnName);
 
+  if (value.includes('intake') || value.includes('refine') || value.includes('triage')) return 'intake';
   if (value.includes('blocked')) return 'blocked';
   if (value.includes('review')) return 'review';
   if (value.includes('test')) return 'testing';
@@ -136,6 +149,8 @@ function statusToColumnName(status: TaskStatus): string | null {
   switch (status) {
     case 'backlog':
       return 'Backlog';
+    case 'intake':
+      return 'Intake';
     case 'ready':
       return 'Ready';
     case 'in_progress':
@@ -147,6 +162,8 @@ function statusToColumnName(status: TaskStatus): string | null {
     case 'done':
       return 'Done';
     case 'blocked':
+      return 'Blocked';
+    default:
       return null;
   }
 }
@@ -169,7 +186,6 @@ function blockedStageFallbackColumn(canonicalTask: CanonicalTask): string | null
 
   return 'In Progress';
 }
-
 async function ensureDir(dirPath: string) {
   await fs.mkdir(dirPath, { recursive: true });
 }
@@ -320,8 +336,18 @@ export async function syncKanbanTaskToCanonical(
   const canonicalTaskId = task.canonical_task_id || (await nextTaskId(project.project_id));
   const existing = await readCanonicalTask(project.project_id, canonicalTaskId);
   const labels = parseLabels(task.labels);
+  const checklist = db.prepare(
+    `
+      SELECT title, completed, position
+      FROM subtasks
+      WHERE task_id = ?
+      ORDER BY position
+    `
+  ).all(task.id) as KanbanChecklistItem[];
   const status = inferStatus(task.column_name);
-  const assignedAgent = coerceAgent(task.assignee);
+  const assignedAgent = task.assignee
+    ? coerceAgent(task.assignee)
+    : (existing?.assigned_agent || (status === 'intake' ? 'coach' : 'rook'));
   const nowIso = new Date().toISOString();
 
   const canonicalTask: CanonicalTask = {
@@ -331,13 +357,22 @@ export async function syncKanbanTaskToCanonical(
     description:
       task.description ||
       `Mirrored from Kanban board "${task.board_name}" column "${task.column_name}".`,
+    intake: {
+      brief: task.intake_brief || existing?.intake?.brief || null,
+      refinement_source: task.refinement_source || existing?.intake?.refinement_source || null,
+      refined_at: task.refined_at || existing?.intake?.refined_at || null,
+      refinement_summary: task.refinement_summary || existing?.intake?.refinement_summary || null,
+    },
     status,
     assigned_agent: assignedAgent,
+    claimed_by: existing?.claimed_by || null,
     priority: task.priority || existing?.priority || 'medium',
     dependencies: existing?.dependencies || [],
+    blocked_by: existing?.blocked_by || [],
     related_repo: project.related_repo,
     branch: existing?.branch || buildBranch(canonicalTaskId, assignedAgent, task.title),
     commits: existing?.commits || [],
+    commit_refs: existing?.commit_refs || existing?.commits || [],
     labels,
     workflow_stage: existing?.workflow_stage || 'kanban-sync',
     blocked_reason:
@@ -345,6 +380,15 @@ export async function syncKanbanTaskToCanonical(
         ? existing?.blocked_reason || 'Blocked in Kanban column.'
         : existing?.blocked_reason || null,
     handoff_notes: existing?.handoff_notes || '',
+    last_heartbeat: existing?.last_heartbeat || null,
+    failure_reason: existing?.failure_reason || null,
+    source_channel: existing?.source_channel || null,
+    artifacts: existing?.artifacts || [],
+    checklist: checklist.map((entry) => ({
+      title: entry.title,
+      completed: Boolean(entry.completed),
+      position: entry.position,
+    })),
     kanban: {
       board_id: task.board_id,
       board_name: task.board_name,
@@ -363,7 +407,10 @@ export async function syncKanbanTaskToCanonical(
       last_synced_at: null,
       last_error: null,
     },
-    timestamps: nextTimestamps(existing, status, nowIso),
+    timestamps: {
+      ...nextTimestamps(existing, status, nowIso),
+      claimed_at: existing?.timestamps.claimed_at || null,
+    },
   };
 
   await writeCanonicalTask(canonicalTask);
@@ -617,6 +664,7 @@ export async function refreshKanbanTaskFromCanonical(
         canonical_task_id = ?,
         project_id = ?,
         related_repo = ?,
+        assignee = ?,
         github_issue_number = ?,
         github_issue_url = ?,
         sync_status = ?,
@@ -629,6 +677,7 @@ export async function refreshKanbanTaskFromCanonical(
     canonicalTask.task_id,
     canonicalTask.project_id,
     canonicalTask.related_repo,
+    canonicalTask.assigned_agent || null,
     githubIssue?.number || null,
     githubIssue?.url || null,
     syncStatus,

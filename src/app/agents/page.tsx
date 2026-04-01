@@ -50,6 +50,8 @@ const AGENT_COLORS: Record<string, string> = {
   coach: 'from-purple-600 to-purple-800',
   engineer: 'from-cyan-600 to-cyan-800',
   researcher: 'from-green-600 to-green-800',
+  test: 'from-lime-600 to-emerald-800',
+  review: 'from-fuchsia-600 to-pink-800',
   health: 'from-red-600 to-red-800',
 }
 
@@ -59,6 +61,8 @@ const AGENT_EMOJIS: Record<string, string> = {
   coach: '🧠',
   engineer: '🛠️',
   researcher: '📚',
+  test: '🧪',
+  review: '🔍',
   health: '💪',
 }
 
@@ -83,7 +87,7 @@ export default function AgentsPage() {
           })
           
           // Build agent list from all agents
-          const allAgents = ['rook', 'consultant', 'coach', 'engineer', 'researcher', 'health']
+          const allAgents = ['rook', 'consultant', 'coach', 'engineer', 'researcher', 'test', 'review', 'health']
           const sessionsByAgent: Record<string, Session[]> = {}
           
           // Group sessions by agent
@@ -103,7 +107,7 @@ export default function AgentsPage() {
               name: id.charAt(0).toUpperCase() + id.slice(1),
               emoji: AGENT_EMOJIS[id] || '🤖',
               workspace: snapshot?.workspace || `/root/.openclaw/workspace-${id}`,
-              sandbox: ['engineer', 'researcher', 'health', 'coach'].includes(id),
+              sandbox: ['engineer', 'researcher', 'test', 'review', 'health', 'coach'].includes(id),
               sessions: agentSessions.length,
               tokens: totalTokens,
               healthStatus: snapshot?.status || 'offline',
@@ -159,7 +163,7 @@ export default function AgentsPage() {
         <p className="text-gray-400">Laden...</p>
       ) : (
         <div className="grid grid-cols-2 gap-4">
-          {agents.filter(a => a.sessions && a.sessions > 0).map((agent) => {
+          {agents.map((agent) => {
             const agentSessions = getAgentSessions(agent.id)
             const lastActivity = getLastActivity(agent.id)
             const totalTokens = agentSessions.reduce((sum, s) => sum + (s.tokens || 0), 0)

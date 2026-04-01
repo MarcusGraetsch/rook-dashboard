@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, SubTask } from '@/lib/db';
+import { syncKanbanTaskToCanonical } from '@/lib/control/task-sync';
 import { randomUUID } from 'crypto';
 
 function generateId() {
   return randomUUID();
+}
+
+function getParentTaskId(db: ReturnType<typeof getDb>, subtaskId: string): string | null {
+  const row = db.prepare('SELECT task_id FROM subtasks WHERE id = ?').get(subtaskId) as { task_id: string } | undefined;
+  return row?.task_id || null;
 }
 
 // GET /api/kanban/subtasks?task_id=xxx - Get subtasks for a task
@@ -57,6 +63,8 @@ export async function POST(request: NextRequest) {
     db.prepare(
       'INSERT INTO subtasks (id, task_id, title, position) VALUES (?, ?, ?, ?)'
     ).run(id, task_id, title.trim(), position);
+
+    await syncKanbanTaskToCanonical(db, task_id);
     
     return NextResponse.json({ id, title: title.trim(), completed: false, position }, { status: 201 });
   } catch (error: any) {
@@ -74,6 +82,7 @@ export async function PUT(request: NextRequest) {
     }
     
     const db = getDb();
+    const taskId = getParentTaskId(db, id);
     
     if (completed !== undefined) {
       db.prepare('UPDATE subtasks SET completed = ? WHERE id = ?').run(completed ? 1 : 0, id);
@@ -81,6 +90,10 @@ export async function PUT(request: NextRequest) {
     
     if (title !== undefined) {
       db.prepare('UPDATE subtasks SET title = ? WHERE id = ?').run(title, id);
+    }
+
+    if (taskId) {
+      await syncKanbanTaskToCanonical(db, taskId);
     }
     
     return NextResponse.json({ success: true });
@@ -100,7 +113,12 @@ export async function DELETE(request: NextRequest) {
     }
     
     const db = getDb();
+    const taskId = getParentTaskId(db, id);
     db.prepare('DELETE FROM subtasks WHERE id = ?').run(id);
+
+    if (taskId) {
+      await syncKanbanTaskToCanonical(db, taskId);
+    }
     
     return NextResponse.json({ success: true });
   } catch (error: any) {

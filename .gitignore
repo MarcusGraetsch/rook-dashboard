@@ -32,5 +32,6 @@ next-env.d.ts
 # IDE
 .idea/
 .vscode/
+*.db
 *.db-shm
 *.db-wal
