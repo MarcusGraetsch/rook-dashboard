@@ -10,8 +10,14 @@ import { Plus, X } from 'lucide-react'
 interface Task {
   id: string
   column_id: string
+  target_status?: 'intake' | 'ready' | 'backlog' | 'in_progress' | 'testing' | 'review' | 'blocked' | 'done'
   title: string
   description: string | null
+  intake_brief?: string | null
+  refinement_source?: string | null
+  refinement_summary?: string | null
+  refined_at?: string | null
+  checklist?: Array<{ title: string; completed: boolean; position: number }>
   column_name?: string | null
   position: number
   priority: 'low' | 'medium' | 'high' | 'urgent'

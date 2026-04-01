@@ -9,8 +9,14 @@ import { TaskModal } from './TaskModal'
 interface Task {
   id: string
   column_id: string
+  target_status?: 'intake' | 'ready' | 'backlog' | 'in_progress' | 'testing' | 'review' | 'blocked' | 'done'
   title: string
   description: string | null
+  intake_brief?: string | null
+  refinement_source?: string | null
+  refinement_summary?: string | null
+  refined_at?: string | null
+  checklist?: Array<{ title: string; completed: boolean; position: number }>
   column_name?: string | null
   position: number
   priority: 'low' | 'medium' | 'high' | 'urgent'
@@ -245,6 +251,12 @@ export function KanbanCard({ task, isDragging, onUpdate, onDelete, onArchive }: 
                     className={`text-xs px-1.5 py-0.5 rounded ${SYNC_STATUS_CLASSES[task.sync_status || 'not_requested'] || SYNC_STATUS_CLASSES.not_requested}`}
                   >
                     {task.sync_status === 'error' ? 'GitHub error' : 'GitHub pending'}
+                  </span>
+                )}
+
+                {task.related_repo && (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200 font-mono">
+                    {task.related_repo.split('/').at(-1)}
                   </span>
                 )}
                 

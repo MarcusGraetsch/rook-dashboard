@@ -8,13 +8,50 @@ function generateId() {
   return randomUUID();
 }
 
+const WORKFLOW_COLUMNS = [
+  { name: 'Backlog', color: '#52525b' },
+  { name: 'Intake', color: '#1d4ed8' },
+  { name: 'Ready', color: '#0f766e' },
+  { name: 'In Progress', color: '#3b82f6' },
+  { name: 'Testing', color: '#7c3aed' },
+  { name: 'Review', color: '#c2410c' },
+  { name: 'Blocked', color: '#b91c1c' },
+  { name: 'Done', color: '#22c55e' },
+];
+
+function normalizeName(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function ensureWorkflowColumns(db: ReturnType<typeof getDb>, boardId: string) {
+  const existing = db
+    .prepare('SELECT id, name, position FROM columns WHERE board_id = ? ORDER BY position')
+    .all(boardId) as Array<{ id: string; name: string; position: number }>;
+
+  const existingNames = new Set(existing.map((column) => normalizeName(column.name)));
+  const insertColumn = db.prepare(
+    'INSERT INTO columns (id, board_id, name, position, color) VALUES (?, ?, ?, ?, ?)'
+  );
+
+  let nextPosition = existing.length;
+  for (const column of WORKFLOW_COLUMNS) {
+    if (existingNames.has(normalizeName(column.name))) {
+      continue;
+    }
+    insertColumn.run(generateId(), boardId, column.name, nextPosition, column.color);
+    nextPosition += 1;
+  }
+}
+
 // GET /api/kanban/boards - List all boards with columns and tasks
 export async function GET() {
   try {
     const db = getDb();
-    await reconcileKanbanProjectionFromCanonical(db);
-    
     const boards = db.prepare('SELECT * FROM boards ORDER BY created_at DESC').all() as Board[];
+    for (const board of boards) {
+      ensureWorkflowColumns(db, board.id);
+    }
+    await reconcileKanbanProjectionFromCanonical(db);
     const columns = db.prepare('SELECT * FROM columns ORDER BY position').all() as Column[];
     // Include subtask counts for token-efficient card display
     const tasks = db.prepare(`
@@ -62,6 +99,10 @@ export async function GET() {
               column_id: task.column_id,
               title: task.title,
               description: task.description,
+              intake_brief: task.intake_brief,
+              refinement_source: task.refinement_source,
+              refinement_summary: task.refinement_summary,
+              refined_at: task.refined_at,
               position: task.position,
               priority: task.priority,
               labels: task.labels,
@@ -109,11 +150,10 @@ export async function POST(request: NextRequest) {
     ).run(id, name, description || null);
     
     // Create default columns
-    const defaultColumns = [
-      { name: 'To Do', color: '#6b7280', position: 0 },
-      { name: 'In Progress', color: '#3b82f6', position: 1 },
-      { name: 'Done', color: '#22c55e', position: 2 },
-    ];
+    const defaultColumns = WORKFLOW_COLUMNS.map((column, position) => ({
+      ...column,
+      position,
+    }));
     
     const insertColumn = db.prepare(
       'INSERT INTO columns (id, board_id, name, position, color) VALUES (?, ?, ?, ?, ?)'

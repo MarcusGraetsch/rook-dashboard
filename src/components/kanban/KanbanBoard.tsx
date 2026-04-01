@@ -23,8 +23,14 @@ import { Plus, Layout } from 'lucide-react'
 interface Task {
   id: string
   column_id: string
+  target_status?: 'intake' | 'ready' | 'backlog' | 'in_progress' | 'testing' | 'review' | 'blocked' | 'done'
   title: string
   description: string | null
+  intake_brief?: string | null
+  refinement_source?: string | null
+  refinement_summary?: string | null
+  refined_at?: string | null
+  checklist?: Array<{ title: string; completed: boolean; position: number }>
   column_name?: string | null
   position: number
   priority: 'low' | 'medium' | 'high' | 'urgent'
@@ -168,6 +174,9 @@ export function KanbanBoard() {
       
       if (res.ok) {
         fetchBoards()
+      } else {
+        const json = await res.json().catch(() => null)
+        window.alert(json?.error || 'Failed to create task.')
       }
     } catch (e) {
       console.error('Failed to create task:', e)
@@ -185,6 +194,9 @@ export function KanbanBoard() {
       if (res.ok) {
         fetchBoards()
         return true
+      } else {
+        const json = await res.json().catch(() => null)
+        window.alert(json?.error || 'Failed to update task.')
       }
     } catch (e) {
       console.error('Failed to update task:', e)
@@ -238,6 +250,9 @@ export function KanbanBoard() {
       if (res.ok) {
         fetchBoards()
         return true
+      } else {
+        const json = await res.json().catch(() => null)
+        window.alert(json?.error || 'Failed to move task.')
       }
     } catch (e) {
       console.error('Failed to move task:', e)

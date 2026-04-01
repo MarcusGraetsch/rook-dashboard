@@ -32,6 +32,10 @@ interface KanbanTaskContext {
   column_id: string;
   title: string;
   description: string | null;
+  intake_brief: string | null;
+  refinement_source: string | null;
+  refinement_summary: string | null;
+  refined_at: string | null;
   position: number;
   priority: TaskPriority;
   labels: string;
@@ -49,6 +53,12 @@ interface KanbanTaskContext {
   board_id: string;
   board_name: string;
   column_name: string;
+}
+
+interface KanbanChecklistItem {
+  title: string;
+  completed: number;
+  position: number;
 }
 
 interface CanonicalSyncResult {
@@ -105,6 +115,7 @@ function coerceAgent(assignee: string | null): CanonicalTask['assigned_agent'] {
 function inferStatus(columnName: string): TaskStatus {
   const value = normalizeName(columnName);
 
+  if (value.includes('intake') || value.includes('refine') || value.includes('triage')) return 'intake';
   if (value.includes('blocked')) return 'blocked';
   if (value.includes('review')) return 'review';
   if (value.includes('test')) return 'testing';
@@ -129,6 +140,8 @@ function statusToColumnName(status: TaskStatus): string {
   switch (status) {
     case 'backlog':
       return 'Backlog';
+    case 'intake':
+      return 'Intake';
     case 'ready':
       return 'Ready';
     case 'in_progress':
@@ -315,8 +328,18 @@ export async function syncKanbanTaskToCanonical(
   const canonicalTaskId = task.canonical_task_id || (await nextTaskId(project.project_id));
   const existing = await readCanonicalTask(project.project_id, canonicalTaskId);
   const labels = parseLabels(task.labels);
+  const checklist = db.prepare(
+    `
+      SELECT title, completed, position
+      FROM subtasks
+      WHERE task_id = ?
+      ORDER BY position
+    `
+  ).all(task.id) as KanbanChecklistItem[];
   const status = inferStatus(task.column_name);
-  const assignedAgent = coerceAgent(task.assignee);
+  const assignedAgent = task.assignee
+    ? coerceAgent(task.assignee)
+    : (existing?.assigned_agent || (status === 'intake' ? 'coach' : 'rook'));
   const nowIso = new Date().toISOString();
 
   const canonicalTask: CanonicalTask = {
@@ -326,6 +349,12 @@ export async function syncKanbanTaskToCanonical(
     description:
       task.description ||
       `Mirrored from Kanban board "${task.board_name}" column "${task.column_name}".`,
+    intake: {
+      brief: task.intake_brief || existing?.intake?.brief || null,
+      refinement_source: task.refinement_source || existing?.intake?.refinement_source || null,
+      refined_at: task.refined_at || existing?.intake?.refined_at || null,
+      refinement_summary: task.refinement_summary || existing?.intake?.refinement_summary || null,
+    },
     status,
     assigned_agent: assignedAgent,
     claimed_by: existing?.claimed_by || null,
@@ -347,6 +376,11 @@ export async function syncKanbanTaskToCanonical(
     failure_reason: existing?.failure_reason || null,
     source_channel: existing?.source_channel || null,
     artifacts: existing?.artifacts || [],
+    checklist: checklist.map((entry) => ({
+      title: entry.title,
+      completed: Boolean(entry.completed),
+      position: entry.position,
+    })),
     kanban: {
       board_id: task.board_id,
       board_name: task.board_name,
