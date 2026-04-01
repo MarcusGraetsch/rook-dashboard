@@ -3,8 +3,12 @@ import path from 'path';
 
 const OPERATIONS_DIR =
   process.env.ROOK_OPERATIONS_DIR || '/root/.openclaw/workspace/operations';
+const RUNTIME_ROOT = process.env.ROOK_RUNTIME_ROOT || '/root/.openclaw/runtime';
+const RUNTIME_OPERATIONS_DIR =
+  process.env.ROOK_RUNTIME_OPERATIONS_DIR || path.join(RUNTIME_ROOT, 'operations');
 const TASKS_DIR = path.join(OPERATIONS_DIR, 'tasks');
-const ARCHIVE_TASKS_DIR = path.join(OPERATIONS_DIR, 'archive', 'tasks');
+const ARCHIVE_TASKS_DIR = path.join(RUNTIME_OPERATIONS_DIR, 'archive', 'tasks');
+const TASK_STATE_DIR = path.join(RUNTIME_OPERATIONS_DIR, 'task-state');
 
 export type TaskStatus =
   | 'backlog'
@@ -149,6 +153,40 @@ async function readTaskFile(filePath: string): Promise<CanonicalTask | null> {
   }
 }
 
+async function readTaskRuntimeState(projectId: string, taskId: string): Promise<Partial<CanonicalTask> | null> {
+  try {
+    const raw = await fs.readFile(path.join(TASK_STATE_DIR, projectId, `${taskId}.json`), 'utf8');
+    return JSON.parse(raw) as Partial<CanonicalTask>;
+  } catch {
+    return null;
+  }
+}
+
+function applyRuntimeTaskState(
+  baseTask: CanonicalTask,
+  runtimeState: Partial<CanonicalTask> | null
+): CanonicalTask {
+  if (!runtimeState) {
+    return baseTask;
+  }
+
+  const merged: CanonicalTask = {
+    ...baseTask,
+    ...runtimeState,
+  };
+
+  if (runtimeState.dispatch) merged.dispatch = runtimeState.dispatch;
+  if (runtimeState.timestamps) {
+    merged.timestamps = {
+      ...baseTask.timestamps,
+      ...runtimeState.timestamps,
+    };
+  }
+  if (runtimeState.github_issue) merged.github_issue = runtimeState.github_issue;
+  if (runtimeState.github_pull_request) merged.github_pull_request = runtimeState.github_pull_request;
+  return merged;
+}
+
 async function getTaskFileCandidates(taskId: string): Promise<string[]> {
   const roots = [TASKS_DIR, ARCHIVE_TASKS_DIR];
   const matches: string[] = [];
@@ -207,7 +245,8 @@ export async function getCanonicalTasks(): Promise<CanonicalTask[]> {
 
       const task = await readTaskFile(path.join(projectDir, fileName));
       if (task) {
-        tasks.push(task);
+        const runtimeState = await readTaskRuntimeState(task.project_id, task.task_id);
+        tasks.push(applyRuntimeTaskState(task, runtimeState));
       }
     }
   }
@@ -227,7 +266,8 @@ export async function getCanonicalTask(taskId: string): Promise<CanonicalTask | 
   for (const candidate of candidates) {
     const task = await readTaskFile(candidate);
     if (task) {
-      return task;
+      const runtimeState = await readTaskRuntimeState(task.project_id, task.task_id);
+      return applyRuntimeTaskState(task, runtimeState);
     }
   }
   return null;

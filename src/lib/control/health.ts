@@ -8,7 +8,10 @@ const execFileAsync = promisify(execFile);
 
 const OPERATIONS_DIR =
   process.env.ROOK_OPERATIONS_DIR || '/root/.openclaw/workspace/operations';
-const HEALTH_DIR = path.join(OPERATIONS_DIR, 'health');
+const RUNTIME_ROOT = process.env.ROOK_RUNTIME_ROOT || '/root/.openclaw/runtime';
+const RUNTIME_OPERATIONS_DIR =
+  process.env.ROOK_RUNTIME_OPERATIONS_DIR || path.join(RUNTIME_ROOT, 'operations');
+const HEALTH_DIR = path.join(RUNTIME_OPERATIONS_DIR, 'health');
 const RUNTIME_SMOKE_FILE = path.join(HEALTH_DIR, 'runtime-smoke.json');
 
 const AGENT_WORKSPACES: Record<string, string> = {

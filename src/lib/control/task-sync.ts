@@ -6,8 +6,11 @@ import { syncTaskToGithubIssue } from '@/lib/control/github-issues';
 
 const OPERATIONS_DIR =
   process.env.ROOK_OPERATIONS_DIR || '/root/.openclaw/workspace/operations';
+const RUNTIME_ROOT = process.env.ROOK_RUNTIME_ROOT || '/root/.openclaw/runtime';
+const RUNTIME_OPERATIONS_DIR =
+  process.env.ROOK_RUNTIME_OPERATIONS_DIR || path.join(RUNTIME_ROOT, 'operations');
 const TASKS_DIR = path.join(OPERATIONS_DIR, 'tasks');
-const ARCHIVE_TASKS_DIR = path.join(OPERATIONS_DIR, 'archive', 'tasks');
+const ARCHIVE_TASKS_DIR = path.join(RUNTIME_OPERATIONS_DIR, 'archive', 'tasks');
 const PROJECTS_FILE = path.join(OPERATIONS_DIR, 'projects', 'projects.json');
 
 const PREFIX_BY_PROJECT: Record<string, string> = {
@@ -686,42 +689,10 @@ export async function refreshKanbanTaskFromCanonical(
     canonicalTask.task_id
   );
 
-  const nextKanban = canonicalTask.kanban
-    ? {
-        ...canonicalTask.kanban,
-        board_id: canonicalTask.kanban.board_id || current.board_id,
-        column_id: nextColumnId,
-        column_name: nextColumnName,
-        task_db_id: canonicalTask.kanban.task_db_id || current.id,
-        position: current.position,
-      }
-    : {
-        board_id: current.board_id,
-        board_name: canonicalTask.kanban?.board_name || 'Rook System',
-        column_id: nextColumnId,
-        column_name: nextColumnName,
-        task_db_id: current.id,
-        position: current.position,
-        sync_origin: 'dashboard-kanban' as const,
-      };
-
-  const changed =
-    !canonicalTask.kanban
-    || canonicalTask.kanban.column_id !== nextKanban.column_id
-    || canonicalTask.kanban.column_name !== nextKanban.column_name
-    || canonicalTask.kanban.task_db_id !== nextKanban.task_db_id
-    || canonicalTask.kanban.position !== nextKanban.position;
-
-  if (changed) {
-    await writeCanonicalTask({
-      ...canonicalTask,
-      kanban: nextKanban,
-      timestamps: {
-        ...canonicalTask.timestamps,
-        updated_at: new Date().toISOString(),
-      },
-    });
-  }
+  // Kanban projection is derived from the board state at read time. Do not
+  // rewrite canonical task files during passive reconciliation, or the live
+  // dashboard poll loop will continuously dirty the repo with regenerated
+  // position/column metadata.
 }
 
 export async function reconcileKanbanProjectionFromCanonical(
