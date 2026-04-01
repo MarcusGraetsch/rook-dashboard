@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Activity, Cpu, HardDrive, Clock, Users, Zap, RefreshCw, Terminal, Database, Shield } from 'lucide-react'
 import Link from 'next/link'
 import KpiCard from '@/components/dashboard/KpiCard'
+import DateRangePicker, { DateRange } from '@/components/dashboard/DateRangePicker'
 
 interface Session {
   key: string;
@@ -35,6 +36,37 @@ interface Activity {
   time: Date
 }
 
+interface RuntimeBackupStatus {
+  timer: {
+    active_state: string | null
+    sub_state: string | null
+    unit_file_state: string | null
+    next_run_at: string | null
+    last_trigger_at: string | null
+  }
+  latest_snapshot: {
+    id: string
+    path: string
+    created_at: string
+    size: string | null
+    includes_dashboard_db: boolean
+    includes_task_archive: boolean
+    includes_runtime_archive: boolean
+    gdrive_remote: string | null
+  } | null
+  collections: Array<{
+    key: string
+    label: string
+    path: string
+    kind: 'runtime' | 'legacy'
+    latest_entry: string | null
+    latest_entry_path: string | null
+    latest_entry_created_at: string | null
+    exists: boolean
+    notes: string | null
+  }>
+}
+
 export default function Dashboard() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
@@ -43,13 +75,27 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [gatewayError, setGatewayError] = useState(false)
   const [activities, setActivities] = useState<Activity[]>([])
+  const [backupStatus, setBackupStatus] = useState<RuntimeBackupStatus | null>(null)
+  const [dateRange, setDateRange] = useState<DateRange>({
+    from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+    to: new Date()
+  })
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [sessionsRes, statsRes] = await Promise.all([
-          fetch('/api/gateway/sessions'),
+        // Build query params from date range
+        const params = new URLSearchParams();
+        if (dateRange.from) params.set('from', dateRange.from.toISOString());
+        if (dateRange.to) params.set('to', dateRange.to.toISOString());
+        
+        const queryString = params.toString();
+        const sessionsUrl = queryString ? `/api/gateway/sessions?${queryString}` : '/api/gateway/sessions';
+        
+        const [sessionsRes, statsRes, backupRes] = await Promise.all([
+          fetch(sessionsUrl),
           fetch('/api/gateway/stats'),
+          fetch('/api/control/backup'),
         ])
         
         if (sessionsRes.ok) {
@@ -75,6 +121,11 @@ export default function Dashboard() {
           const statsData = await statsRes.json()
           setStats(statsData)
         }
+
+        if (backupRes.ok) {
+          const backupJson = await backupRes.json()
+          setBackupStatus(backupJson.backup || null)
+        }
       } catch (e) {
         console.error('Failed to fetch data:', e)
         setGatewayError(true)
@@ -86,19 +137,33 @@ export default function Dashboard() {
     fetchData()
     const interval = setInterval(fetchData, 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [dateRange])
 
   const activeSessions = sessions.filter(s => 
     Date.now() - s.updatedAt < 5 * 60 * 1000
   ).length
+  const latestBackup = backupStatus?.latest_snapshot || null
+  const backupHealthy =
+    latestBackup?.includes_dashboard_db &&
+    latestBackup?.includes_task_archive &&
+    latestBackup?.includes_runtime_archive
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Dashboard</h2>
         
-        {/* Quick Actions */}
+        {/* Date Range Picker */}
         <div className="flex items-center gap-2">
+          <DateRangePicker
+            value={dateRange}
+            onChange={(range) => {
+              setDateRange(range)
+              // Here you would typically trigger a data refresh with the new range
+              // For example: fetchData(range.from, range.to)
+              console.log('Date range changed:', range)
+            }}
+          />
           <Link
             href="/kanban"
             className="flex items-center gap-2 px-4 py-2 bg-highlight hover:bg-highlight/80 rounded-lg text-white text-sm"
@@ -271,6 +336,94 @@ export default function Dashboard() {
           <p className="text-2xl font-bold text-highlight">3</p>
           <p className="text-sm text-gray-400">Aktiv</p>
         </Link>
+      </div>
+
+      <div className="bg-secondary p-6 rounded-lg border border-gray-700">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold flex items-center gap-2">
+            <Shield className="w-5 h-5 text-highlight" />
+            Runtime Backup
+          </h3>
+          <span className={`text-xs px-2 py-1 rounded ${
+            backupStatus?.timer.active_state === 'active' ? 'bg-green-900/50 text-green-300' : 'bg-red-900/50 text-red-300'
+          }`}>
+            {backupStatus?.timer.active_state === 'active' ? 'Timer active' : 'Timer missing'}
+          </span>
+        </div>
+
+        {!backupStatus ? (
+          <p className="text-gray-400 text-sm">Backup status unavailable.</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="text-gray-400">Latest snapshot</p>
+                <p className="font-medium">{latestBackup?.id || 'No snapshot yet'}</p>
+              </div>
+              <div>
+                <p className="text-gray-400">Next run</p>
+                <p>{backupStatus.timer.next_run_at || 'Unknown'}</p>
+              </div>
+              <div>
+                <p className="text-gray-400">Last trigger</p>
+                <p>{backupStatus.timer.last_trigger_at || 'Unknown'}</p>
+              </div>
+              <div>
+                <p className="text-gray-400">Remote</p>
+                <p className="break-all">{latestBackup?.gdrive_remote || 'Not recorded'}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="text-gray-400">Snapshot health</p>
+                <p className={backupHealthy ? 'text-green-300 font-medium' : 'text-orange-300 font-medium'}>
+                  {backupHealthy ? 'Dashboard DB + task archives present' : 'Snapshot incomplete'}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-400">Contents</p>
+                <div className="space-y-1">
+                  <p>{latestBackup?.includes_dashboard_db ? '• Dashboard DB included' : '• Dashboard DB missing'}</p>
+                  <p>{latestBackup?.includes_task_archive ? '• Canonical tasks included' : '• Canonical tasks missing'}</p>
+                  <p>{latestBackup?.includes_runtime_archive ? '• Health/log archive included' : '• Health/log archive missing'}</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-gray-400">Local path</p>
+                <p className="break-all">{latestBackup?.path || 'Unknown'}</p>
+              </div>
+              <div>
+                <p className="text-gray-400">Recorded size</p>
+                <p>{latestBackup?.size || 'Unknown'}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {backupStatus?.collections?.length ? (
+          <div className="mt-6 border-t border-gray-700 pt-4">
+            <h4 className="font-medium mb-3">Backup Collections</h4>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              {backupStatus.collections.map((collection) => (
+                <div key={collection.key} className="rounded-lg border border-gray-700 p-4 bg-accent/20">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <p className="font-medium">{collection.label}</p>
+                    <span className={`text-xs px-2 py-1 rounded ${
+                      collection.exists ? 'bg-green-900/50 text-green-300' : 'bg-orange-900/50 text-orange-300'
+                    }`}>
+                      {collection.exists ? 'Snapshots found' : 'No local snapshot'}
+                    </span>
+                  </div>
+                  <p className="text-gray-400 break-all">{collection.path}</p>
+                  <p className="mt-2">{collection.latest_entry || 'No backup entry detected yet'}</p>
+                  <p className="text-gray-500">{collection.latest_entry_created_at || 'No timestamp available'}</p>
+                  {collection.notes && <p className="mt-2 text-gray-400">{collection.notes}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   )

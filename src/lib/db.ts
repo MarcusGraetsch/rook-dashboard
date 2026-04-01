@@ -41,6 +41,10 @@ function initSchema() {
       column_id TEXT NOT NULL,
       title TEXT NOT NULL,
       description TEXT,
+      intake_brief TEXT,
+      refinement_source TEXT,
+      refinement_summary TEXT,
+      refined_at TEXT,
       position INTEGER NOT NULL DEFAULT 0,
       priority TEXT DEFAULT 'medium',
       labels TEXT DEFAULT '[]',
@@ -73,6 +77,10 @@ function initSchema() {
   ensureColumn(database, 'tasks', 'canonical_task_id', 'TEXT');
   ensureColumn(database, 'tasks', 'project_id', 'TEXT');
   ensureColumn(database, 'tasks', 'related_repo', 'TEXT');
+  ensureColumn(database, 'tasks', 'intake_brief', 'TEXT');
+  ensureColumn(database, 'tasks', 'refinement_source', 'TEXT');
+  ensureColumn(database, 'tasks', 'refinement_summary', 'TEXT');
+  ensureColumn(database, 'tasks', 'refined_at', 'TEXT');
   ensureColumn(database, 'tasks', 'github_issue_number', 'INTEGER');
   ensureColumn(database, 'tasks', 'github_issue_url', 'TEXT');
   ensureColumn(database, 'tasks', 'sync_status', "TEXT DEFAULT 'local_only'");
@@ -114,6 +122,10 @@ export interface Task {
   column_id: string;
   title: string;
   description: string | null;
+  intake_brief?: string | null;
+  refinement_source?: string | null;
+  refinement_summary?: string | null;
+  refined_at?: string | null;
   position: number;
   priority: 'low' | 'medium' | 'high' | 'urgent';
   labels: string;

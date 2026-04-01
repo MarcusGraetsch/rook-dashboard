@@ -8,6 +8,7 @@ const ARCHIVE_TASKS_DIR = path.join(OPERATIONS_DIR, 'archive', 'tasks');
 
 export type TaskStatus =
   | 'backlog'
+  | 'intake'
   | 'ready'
   | 'in_progress'
   | 'review'
@@ -22,17 +23,59 @@ export interface CanonicalTask {
   project_id: string;
   title: string;
   description: string;
+  intake?: {
+    brief: string | null;
+    refinement_source: string | null;
+    refined_at: string | null;
+    refinement_summary?: string | null;
+  };
   status: TaskStatus;
   assigned_agent: string;
+  claimed_by?: string | null;
+  blocked_by?: string[];
   priority: TaskPriority;
   dependencies: string[];
   related_repo: string;
   branch: string;
   commits: string[];
+  commit_refs?: string[];
   labels?: string[];
   workflow_stage?: string;
   blocked_reason?: string | null;
   handoff_notes?: string;
+  last_heartbeat?: string | null;
+  failure_reason?: string | null;
+  source_channel?: string | null;
+  artifacts?: string[];
+  checklist?: Array<{
+    title: string;
+    completed: boolean;
+    position: number;
+  }>;
+  test_evidence?: {
+    status?: 'passed' | 'failed' | null;
+    commands?: string[];
+    summary?: string | null;
+  };
+  review_evidence?: {
+    verdict?: 'approved' | 'changes_requested' | null;
+    summary?: string | null;
+  };
+  dispatch?: {
+    mode?: string | null;
+    executor?: string | null;
+    attempts?: number;
+    launched_at?: string | null;
+    last_checked_at?: string | null;
+    model?: string | null;
+    thinking?: string | null;
+    session_key?: string | null;
+    session_id?: string | null;
+    dispatched_status?: string | null;
+    dispatched_owner?: string | null;
+    last_result?: string | null;
+    last_error?: string | null;
+  };
   kanban?: {
     board_id: string;
     board_name: string;
@@ -65,6 +108,7 @@ export interface CanonicalTask {
     updated_at: string;
     started_at: string | null;
     completed_at: string | null;
+    claimed_at?: string | null;
   };
 }
 

@@ -23,8 +23,14 @@ import { Plus, Layout } from 'lucide-react'
 interface Task {
   id: string
   column_id: string
+  target_status?: 'intake' | 'ready' | 'backlog' | 'in_progress' | 'testing' | 'review' | 'blocked' | 'done'
   title: string
   description: string | null
+  intake_brief?: string | null
+  refinement_source?: string | null
+  refinement_summary?: string | null
+  refined_at?: string | null
+  checklist?: Array<{ title: string; completed: boolean; position: number }>
   column_name?: string | null
   position: number
   priority: 'low' | 'medium' | 'high' | 'urgent'
@@ -38,6 +44,11 @@ interface Task {
   github_issue_url?: string | null
   sync_status?: string | null
   sync_error?: string | null
+  canonical_status?: string | null
+  canonical_assigned_agent?: string | null
+  claimed_by?: string | null
+  current_worker?: string | null
+  pipeline_state?: 'running' | 'idle' | 'done' | 'blocked' | string | null
 }
 
 interface Column {
@@ -82,6 +93,14 @@ export function KanbanBoard() {
 
   useEffect(() => {
     fetchBoards()
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      fetchBoards()
+    }, 5000)
+
+    return () => window.clearInterval(timer)
   }, [])
 
   async function fetchBoards() {
@@ -155,6 +174,9 @@ export function KanbanBoard() {
       
       if (res.ok) {
         fetchBoards()
+      } else {
+        const json = await res.json().catch(() => null)
+        window.alert(json?.error || 'Failed to create task.')
       }
     } catch (e) {
       console.error('Failed to create task:', e)
@@ -172,6 +194,9 @@ export function KanbanBoard() {
       if (res.ok) {
         fetchBoards()
         return true
+      } else {
+        const json = await res.json().catch(() => null)
+        window.alert(json?.error || 'Failed to update task.')
       }
     } catch (e) {
       console.error('Failed to update task:', e)
@@ -225,6 +250,9 @@ export function KanbanBoard() {
       if (res.ok) {
         fetchBoards()
         return true
+      } else {
+        const json = await res.json().catch(() => null)
+        window.alert(json?.error || 'Failed to move task.')
       }
     } catch (e) {
       console.error('Failed to move task:', e)
