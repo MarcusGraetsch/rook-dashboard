@@ -30,6 +30,12 @@ interface Task {
   github_issue_url?: string | null
   sync_status?: string | null
   sync_error?: string | null
+  commit_count?: number
+  pr_state?: 'open' | 'closed' | 'merged' | null
+  pr_number?: number | null
+  test_status?: 'passed' | 'failed' | null
+  review_verdict?: 'approved' | 'changes_requested' | null
+  has_handoff_notes?: boolean
 }
 
 interface ProjectOption {
@@ -44,6 +50,15 @@ interface TaskGitContext {
   related_repo: string
   branch_exists: boolean
   activity_status: 'planned' | 'branch_pushed' | 'commits_pushed' | 'pr_open' | 'merged' | 'error'
+  issue?: {
+    repo: string
+    number: number | null
+    url: string | null
+    state: 'open' | 'closed' | null
+    sync_status: 'not_requested' | 'pending' | 'synced' | 'error'
+    last_synced_at: string | null
+    last_error: string | null
+  } | null
   pull_request?: {
     number: number | null
     url: string | null
@@ -365,6 +380,14 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
 
   const isDoneTask = task?.column_name?.toLowerCase() === 'done'
   const selectedProject = projects.find((project) => project.project_id === projectId) || null
+  const hasCommits = (gitContext?.commits?.length || 0) > 0
+  const evidenceState = {
+    handoff: Boolean(task?.has_handoff_notes),
+    commits: hasCommits,
+    pr: Boolean(gitContext?.pull_request?.number),
+    tests: task?.test_status === 'passed',
+    review: task?.review_verdict === 'approved',
+  }
 
   async function handleRefine() {
     const brief = intakeBrief.trim() || description.trim() || title.trim()
@@ -670,8 +693,26 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
           </p>
 
           {task && (
-            <div className="pt-4 border-t border-gray-700 space-y-3">
-              <h4 className="text-sm font-semibold text-gray-300">System Sync</h4>
+            <div className="pt-4 border-t border-gray-700 space-y-4">
+              <h4 className="text-sm font-semibold text-gray-300">Delivery Evidence</h4>
+
+              <div className="grid grid-cols-5 gap-2 text-xs">
+                <div className={`rounded px-2 py-2 text-center ${evidenceState.handoff ? 'bg-sky-900/50 text-sky-300' : 'bg-gray-800 text-gray-400'}`}>
+                  Engineer
+                </div>
+                <div className={`rounded px-2 py-2 text-center ${evidenceState.commits ? 'bg-blue-900/50 text-blue-300' : 'bg-gray-800 text-gray-400'}`}>
+                  Commits
+                </div>
+                <div className={`rounded px-2 py-2 text-center ${evidenceState.pr ? 'bg-amber-900/50 text-amber-300' : 'bg-gray-800 text-gray-400'}`}>
+                  PR
+                </div>
+                <div className={`rounded px-2 py-2 text-center ${evidenceState.tests ? 'bg-green-900/50 text-green-300' : 'bg-gray-800 text-gray-400'}`}>
+                  Tests
+                </div>
+                <div className={`rounded px-2 py-2 text-center ${evidenceState.review ? 'bg-green-900/50 text-green-300' : 'bg-gray-800 text-gray-400'}`}>
+                  Review
+                </div>
+              </div>
 
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
@@ -701,6 +742,41 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
                   >
                     {GIT_ACTIVITY_LABELS[gitContext?.activity_status || 'planned']}
                   </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-500">Engineer Handoff</p>
+                  <p className={task.has_handoff_notes ? 'text-sky-300' : 'text-gray-300'}>
+                    {task.has_handoff_notes ? 'Present in canonical task' : 'Missing'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Commit Evidence</p>
+                  <p className={hasCommits ? 'text-blue-300' : 'text-gray-300'}>
+                    {hasCommits ? `${gitContext?.commits.length || 0} commit(s) on branch` : 'No pushed commits detected'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Test Evidence</p>
+                  <p className={task.test_status === 'passed' ? 'text-green-300' : task.test_status === 'failed' ? 'text-red-300' : 'text-gray-300'}>
+                    {task.test_status === 'passed'
+                      ? 'Passed'
+                      : task.test_status === 'failed'
+                        ? 'Failed'
+                        : 'No recorded test result'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Review Verdict</p>
+                  <p className={task.review_verdict === 'approved' ? 'text-green-300' : task.review_verdict === 'changes_requested' ? 'text-red-300' : 'text-gray-300'}>
+                    {task.review_verdict === 'approved'
+                      ? 'Approved'
+                      : task.review_verdict === 'changes_requested'
+                        ? 'Changes requested'
+                        : 'No recorded review verdict'}
+                  </p>
                 </div>
               </div>
 

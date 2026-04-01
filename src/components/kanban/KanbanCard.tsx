@@ -34,6 +34,12 @@ interface Task {
   subtask_done?: number
   canonical_status?: string | null
   canonical_assigned_agent?: string | null
+  commit_count?: number
+  pr_state?: 'open' | 'closed' | 'merged' | null
+  pr_number?: number | null
+  test_status?: 'passed' | 'failed' | null
+  review_verdict?: 'approved' | 'changes_requested' | null
+  has_handoff_notes?: boolean
   claimed_by?: string | null
   current_worker?: string | null
   pipeline_state?: 'running' | 'idle' | 'done' | 'blocked' | string | null
@@ -235,6 +241,54 @@ export function KanbanCard({ task, isDragging, onUpdate, onDelete, onArchive }: 
                     Stage owner: {ASSIGNEE_NAMES[task.canonical_assigned_agent] || task.canonical_assigned_agent}
                   </span>
                 )}
+
+                {task.commit_count ? (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-blue-950/50 text-blue-300">
+                    {task.commit_count} commit{task.commit_count === 1 ? '' : 's'}
+                  </span>
+                ) : null}
+
+                {task.pr_state ? (
+                  <span className={`text-xs px-1.5 py-0.5 rounded ${
+                    task.pr_state === 'merged'
+                      ? 'bg-green-900/50 text-green-300'
+                      : task.pr_state === 'open'
+                        ? 'bg-amber-900/50 text-amber-300'
+                        : 'bg-gray-700 text-gray-300'
+                  }`}>
+                    {task.pr_state === 'merged'
+                      ? `PR merged${task.pr_number ? ` #${task.pr_number}` : ''}`
+                      : task.pr_state === 'open'
+                        ? `PR open${task.pr_number ? ` #${task.pr_number}` : ''}`
+                        : 'PR closed'}
+                  </span>
+                ) : null}
+
+                {task.test_status ? (
+                  <span className={`text-xs px-1.5 py-0.5 rounded ${
+                    task.test_status === 'passed'
+                      ? 'bg-green-900/50 text-green-300'
+                      : 'bg-red-900/50 text-red-300'
+                  }`}>
+                    Tests {task.test_status}
+                  </span>
+                ) : null}
+
+                {task.review_verdict ? (
+                  <span className={`text-xs px-1.5 py-0.5 rounded ${
+                    task.review_verdict === 'approved'
+                      ? 'bg-green-900/50 text-green-300'
+                      : 'bg-red-900/50 text-red-300'
+                  }`}>
+                    Review {task.review_verdict === 'approved' ? 'approved' : 'changes requested'}
+                  </span>
+                ) : null}
+
+                {task.has_handoff_notes ? (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-sky-900/50 text-sky-300">
+                    Handoff
+                  </span>
+                ) : null}
 
                 {task.github_issue_number ? (
                   <a
