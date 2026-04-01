@@ -631,24 +631,24 @@ export async function refreshKanbanTaskFromCanonical(
     if (targetColumn) {
       nextColumnId = targetColumn.id;
       nextColumnName = targetColumn.name;
-    } else if (canonicalTask.status === 'blocked') {
-      const fallbackColumnName = blockedStageFallbackColumn(canonicalTask);
-      if (fallbackColumnName) {
-        const fallbackColumn = db.prepare(
-          `
-            SELECT id, name
-            FROM columns
-            WHERE board_id = ?
-              AND lower(name) = lower(?)
-            ORDER BY position
-            LIMIT 1
-          `
-        ).get(current.board_id, fallbackColumnName) as { id: string; name: string } | undefined;
+    }
+  } else if (!targetColumnName && canonicalTask.status === 'blocked') {
+    const fallbackColumnName = blockedStageFallbackColumn(canonicalTask);
+    if (fallbackColumnName && normalizeName(fallbackColumnName) !== normalizeName(current.column_name)) {
+      const fallbackColumn = db.prepare(
+        `
+          SELECT id, name
+          FROM columns
+          WHERE board_id = ?
+            AND lower(name) = lower(?)
+          ORDER BY position
+          LIMIT 1
+        `
+      ).get(current.board_id, fallbackColumnName) as { id: string; name: string } | undefined;
 
-        if (fallbackColumn) {
-          nextColumnId = fallbackColumn.id;
-          nextColumnName = fallbackColumn.name;
-        }
+      if (fallbackColumn) {
+        nextColumnId = fallbackColumn.id;
+        nextColumnName = fallbackColumn.name;
       }
     }
   }
