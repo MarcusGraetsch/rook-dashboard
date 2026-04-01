@@ -70,6 +70,15 @@ interface CanonicalSyncResult {
   syncStatus: string;
 }
 
+interface KanbanProjectionRow {
+  id: string;
+  canonical_task_id: string | null;
+  project_id: string | null;
+  board_id: string;
+  column_id: string;
+  position: number;
+}
+
 function safeSlug(input: string): string {
   return input
     .toLowerCase()
@@ -136,7 +145,7 @@ function inferStatus(columnName: string): TaskStatus {
   return 'backlog';
 }
 
-function statusToColumnName(status: TaskStatus): string {
+function statusToColumnName(status: TaskStatus): string | null {
   switch (status) {
     case 'backlog':
       return 'Backlog';
@@ -155,7 +164,7 @@ function statusToColumnName(status: TaskStatus): string {
     case 'blocked':
       return 'Blocked';
     default:
-      return 'Backlog';
+      return null;
   }
 }
 
@@ -177,7 +186,6 @@ function blockedStageFallbackColumn(canonicalTask: CanonicalTask): string | null
 
   return 'In Progress';
 }
-
 async function ensureDir(dirPath: string) {
   await fs.mkdir(dirPath, { recursive: true });
 }
@@ -689,7 +697,7 @@ export async function refreshKanbanTaskFromCanonical(
       }
     : {
         board_id: current.board_id,
-        board_name: 'Rook System',
+        board_name: canonicalTask.kanban?.board_name || 'Rook System',
         column_id: nextColumnId,
         column_name: nextColumnName,
         task_db_id: current.id,
@@ -733,14 +741,7 @@ export async function reconcileKanbanProjectionFromCanonical(
       WHERE t.archived_at IS NULL
         AND t.canonical_task_id IS NOT NULL
     `
-  ).all() as Array<{
-    id: string;
-    canonical_task_id: string | null;
-    project_id: string | null;
-    board_id: string;
-    column_id: string;
-    position: number;
-  }>;
+  ).all() as KanbanProjectionRow[];
 
   const changes: Array<{ canonical_task_id: string; from: string; to: string }> = [];
 
