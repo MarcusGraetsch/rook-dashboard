@@ -27,6 +27,7 @@ interface Task {
   title: string
   description: string | null
   intake_brief?: string | null
+  handoff_notes?: string | null
   refinement_source?: string | null
   refinement_summary?: string | null
   refined_at?: string | null
@@ -72,6 +73,29 @@ const priorityColors = {
   medium: 'text-blue-400',
   high: 'text-orange-400',
   urgent: 'text-red-400',
+}
+
+function statusToColumnName(status: string | null | undefined): string | null {
+  switch (status) {
+    case 'backlog':
+      return 'Backlog'
+    case 'intake':
+      return 'Intake'
+    case 'ready':
+      return 'Ready'
+    case 'in_progress':
+      return 'In Progress'
+    case 'testing':
+      return 'Testing'
+    case 'review':
+      return 'Review'
+    case 'blocked':
+      return 'Blocked'
+    case 'done':
+      return 'Done'
+    default:
+      return null
+  }
 }
 
 export function KanbanBoard() {
@@ -173,6 +197,12 @@ export function KanbanBoard() {
       })
       
       if (res.ok) {
+        const json = await res.json().catch(() => null)
+        if (json?.dispatch?.triggered && !json.dispatch.ok) {
+          window.alert(
+            `Ticket created, but auto-dispatch from Ready failed: ${json.dispatch.reason || 'unknown error'}`
+          )
+        }
         fetchBoards()
       } else {
         const json = await res.json().catch(() => null)
@@ -192,6 +222,12 @@ export function KanbanBoard() {
       })
       
       if (res.ok) {
+        const json = await res.json().catch(() => null)
+        if (json?.dispatch?.triggered && !json.dispatch.ok) {
+          window.alert(
+            `Ticket moved to Ready, but auto-dispatch failed: ${json.dispatch.reason || 'unknown error'}`
+          )
+        }
         fetchBoards()
         return true
       } else {
@@ -235,7 +271,7 @@ export function KanbanBoard() {
     }
   }
 
-  async function moveTask(taskId: string, newColumnId: string, newPosition: number) {
+  async function moveTask(taskId: string, newColumnId: string, newPosition: number, taskSnapshot?: Task) {
     try {
       const res = await fetch('/api/kanban/tasks', {
         method: 'PUT',
@@ -243,11 +279,25 @@ export function KanbanBoard() {
         body: JSON.stringify({ 
           id: taskId, 
           column_id: newColumnId, 
-          position: newPosition 
+          position: newPosition,
+          intake_brief: taskSnapshot?.intake_brief ?? null,
+          handoff_notes: taskSnapshot?.handoff_notes ?? null,
+          checklist: Array.isArray(taskSnapshot?.checklist) ? taskSnapshot?.checklist : undefined,
         }),
       })
       
       if (res.ok) {
+        const json = await res.json().catch(() => null)
+        const dispatchStatus = typeof json?.dispatch?.status === 'string' ? json.dispatch.status : null
+        const dispatchColumnName = statusToColumnName(dispatchStatus)
+        const dispatchColumn = dispatchColumnName
+          ? activeBoard?.columns.find((column) => column.name === dispatchColumnName) || null
+          : null
+
+        if (json?.dispatch?.accepted && dispatchColumn) {
+          const dispatchPosition = Math.max(...dispatchColumn.tasks.map((task) => task.position), -1) + 1
+          applyTaskMoveLocally(taskId, dispatchColumn.id, dispatchPosition)
+        }
         fetchBoards()
         return true
       } else {
@@ -378,7 +428,7 @@ export function KanbanBoard() {
     if (targetColumn) {
       const maxPosition = Math.max(...targetColumn.tasks.map(t => t.position), -1)
       applyTaskMoveLocally(activeId, overColumnId, maxPosition + 1)
-      moveTask(activeId, overColumnId, maxPosition + 1)
+      moveTask(activeId, overColumnId, maxPosition + 1, activeTask)
     }
   }
 

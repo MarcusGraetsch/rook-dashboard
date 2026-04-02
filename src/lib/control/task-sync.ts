@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import type Database from 'better-sqlite3';
+import { getCanonicalTask } from '@/lib/control/tasks';
 import type { CanonicalTask, TaskPriority, TaskStatus } from '@/lib/control/tasks';
 import { syncTaskToGithubIssue } from '@/lib/control/github-issues';
 
@@ -44,6 +45,7 @@ interface KanbanTaskContext {
   labels: string;
   assignee: string | null;
   due_date: string | null;
+  handoff_notes: string | null;
   created_at: string;
   updated_at: string;
   canonical_task_id: string | null;
@@ -171,6 +173,26 @@ function statusToColumnName(status: TaskStatus): string | null {
   }
 }
 
+function projectedRuntimeStatus(canonicalTask: CanonicalTask): TaskStatus | null {
+  const claimedBy = String(canonicalTask.claimed_by || '').trim();
+  const dispatchStatus = String(canonicalTask.dispatch?.dispatched_status || '').trim() as TaskStatus | '';
+  const dispatchResult = String(canonicalTask.dispatch?.last_result || '').trim().toLowerCase();
+
+  if (!claimedBy) {
+    return null;
+  }
+
+  if (!dispatchStatus) {
+    return null;
+  }
+
+  if (dispatchResult === 'launching' || dispatchResult === 'running') {
+    return dispatchStatus;
+  }
+
+  return dispatchStatus;
+}
+
 function blockedStageFallbackColumn(canonicalTask: CanonicalTask): string | null {
   const executor = String(canonicalTask.dispatch?.executor || '').toLowerCase();
   if (executor === 'review') return 'Review';
@@ -234,12 +256,7 @@ function inferProject(boardName: string, projects: ProjectRegistryEntry[]): Proj
 }
 
 async function readCanonicalTask(projectId: string, taskId: string): Promise<CanonicalTask | null> {
-  try {
-    const raw = await fs.readFile(path.join(TASKS_DIR, projectId, `${taskId}.json`), 'utf8');
-    return JSON.parse(raw) as CanonicalTask;
-  } catch {
-    return null;
-  }
+  return getCanonicalTask(taskId);
 }
 
 async function nextTaskId(projectId: string): Promise<string> {
@@ -382,7 +399,7 @@ export async function syncKanbanTaskToCanonical(
       status === 'blocked'
         ? existing?.blocked_reason || 'Blocked in Kanban column.'
         : existing?.blocked_reason || null,
-    handoff_notes: existing?.handoff_notes || '',
+    handoff_notes: task.handoff_notes || existing?.handoff_notes || '',
     last_heartbeat: existing?.last_heartbeat || null,
     failure_reason: existing?.failure_reason || null,
     source_channel: existing?.source_channel || null,
@@ -615,7 +632,8 @@ export async function refreshKanbanTaskFromCanonical(
     return;
   }
 
-  const targetColumnName = statusToColumnName(canonicalTask.status);
+  const projectedStatus = projectedRuntimeStatus(canonicalTask) || canonicalTask.status;
+  const targetColumnName = statusToColumnName(projectedStatus);
   let nextColumnId = current.column_id;
   let nextColumnName = current.column_name;
 
@@ -688,6 +706,29 @@ export async function refreshKanbanTaskFromCanonical(
     nextColumnId,
     canonicalTask.task_id
   );
+
+  db.prepare('DELETE FROM subtasks WHERE task_id = ?').run(current.id);
+
+  const canonicalChecklist = Array.isArray(canonicalTask.checklist) ? canonicalTask.checklist : [];
+  if (canonicalChecklist.length > 0) {
+    const insertSubtask = db.prepare(
+      'INSERT INTO subtasks (id, task_id, title, completed, position) VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?)'
+    );
+
+    canonicalChecklist.forEach((item, index) => {
+      const title = String(item?.title || '').trim();
+      if (!title) {
+        return;
+      }
+
+      insertSubtask.run(
+        current.id,
+        title,
+        item?.completed ? 1 : 0,
+        Number.isInteger(item?.position) ? item.position : index,
+      );
+    });
+  }
 
   // Kanban projection is derived from the board state at read time. Do not
   // rewrite canonical task files during passive reconciliation, or the live
