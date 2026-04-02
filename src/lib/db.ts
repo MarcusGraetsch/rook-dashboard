@@ -50,6 +50,7 @@ function initSchema() {
       labels TEXT DEFAULT '[]',
       assignee TEXT,
       due_date TEXT,
+      handoff_notes TEXT,
       canonical_task_id TEXT,
       project_id TEXT,
       related_repo TEXT,
@@ -81,6 +82,7 @@ function initSchema() {
   ensureColumn(database, 'tasks', 'refinement_source', 'TEXT');
   ensureColumn(database, 'tasks', 'refinement_summary', 'TEXT');
   ensureColumn(database, 'tasks', 'refined_at', 'TEXT');
+  ensureColumn(database, 'tasks', 'handoff_notes', 'TEXT');
   ensureColumn(database, 'tasks', 'github_issue_number', 'INTEGER');
   ensureColumn(database, 'tasks', 'github_issue_url', 'TEXT');
   ensureColumn(database, 'tasks', 'sync_status', "TEXT DEFAULT 'local_only'");
@@ -131,6 +133,7 @@ export interface Task {
   labels: string;
   assignee: string | null;
   due_date: string | null;
+  handoff_notes?: string | null;
   canonical_task_id?: string | null;
   project_id?: string | null;
   related_repo?: string | null;

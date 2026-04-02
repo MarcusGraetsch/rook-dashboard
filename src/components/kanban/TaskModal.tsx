@@ -266,6 +266,7 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
   const [dueDate, setDueDate] = useState('')
   const [projectId, setProjectId] = useState('')
   const [relatedRepo, setRelatedRepo] = useState('')
+  const [handoffNotes, setHandoffNotes] = useState('')
   const [draftChecklist, setDraftChecklist] = useState<ChecklistDraftItem[]>([])
   const [refinementLoading, setRefinementLoading] = useState(false)
   const [refinementError, setRefinementError] = useState<string | null>(null)
@@ -287,6 +288,7 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
       setDueDate(task.due_date || '')
       setProjectId(task.project_id || '')
       setRelatedRepo(task.related_repo || '')
+      setHandoffNotes(task.handoff_notes || '')
       setDraftChecklist(Array.isArray(task.checklist) ? task.checklist : [])
       setRefinementSource(task.refinement_source || null)
       setRefinementSummary(task.refinement_summary || (task.refinement_source ? `Last refinement source: ${task.refinement_source}` : null))
@@ -300,6 +302,7 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
       setDueDate('')
       setProjectId('')
       setRelatedRepo('')
+      setHandoffNotes('')
       setDraftChecklist([])
       setRefinementSource(null)
       setRefinementSummary(null)
@@ -471,6 +474,7 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
       refined_at: refinementSource ? (task?.refined_at || new Date().toISOString()) : null,
       project_id: projectId || null,
       related_repo: relatedRepo || selectedProject?.related_repo || task?.related_repo || null,
+      handoff_notes: handoffNotes.trim() || null,
       checklist: draftChecklist,
     })
   }
@@ -492,6 +496,7 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
       refined_at: refinementSource ? (task?.refined_at || new Date().toISOString()) : null,
       project_id: projectId || null,
       related_repo: relatedRepo || selectedProject?.related_repo || task?.related_repo || null,
+      handoff_notes: handoffNotes.trim() || null,
       checklist: draftChecklist,
       target_status: 'intake',
     })
@@ -800,6 +805,19 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
                   </div>
                 </div>
               )}
+
+              <div className="text-sm space-y-2">
+                <label className="block text-gray-500">Update Handoff Notes</label>
+                <textarea
+                  value={handoffNotes}
+                  onChange={(e) => setHandoffNotes(e.target.value)}
+                  placeholder="What changed, what was validated, and any handoff notes for the next stage..."
+                  className="w-full px-3 py-2 bg-primary border border-gray-600 rounded text-white h-28 resize-none"
+                />
+                <p className="text-xs text-gray-500">
+                  Engineer-stage completion requires `handoff_notes`. Use this to recover blocked tasks after the implementation is already done.
+                </p>
+              </div>
 
               <div className="text-sm">
                 <p className="text-gray-500">GitHub Issue</p>

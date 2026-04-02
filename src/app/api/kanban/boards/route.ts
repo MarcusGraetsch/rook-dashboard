@@ -23,6 +23,13 @@ function normalizeName(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+interface ChecklistItem {
+  task_id: string;
+  title: string;
+  completed: number;
+  position: number;
+}
+
 function ensureWorkflowColumns(db: ReturnType<typeof getDb>, boardId: string) {
   const existing = db
     .prepare('SELECT id, name, position FROM columns WHERE board_id = ? ORDER BY position')
@@ -62,6 +69,24 @@ export async function GET() {
       WHERE t.archived_at IS NULL
       ORDER BY t.position
     `).all() as any[];
+    const checklistRows = db.prepare(
+      `
+        SELECT task_id, title, completed, position
+        FROM subtasks
+        ORDER BY task_id, position
+      `
+    ).all() as ChecklistItem[];
+    const checklistByTaskId = new Map<string, Array<{ title: string; completed: boolean; position: number }>>();
+
+    checklistRows.forEach((item) => {
+      const existing = checklistByTaskId.get(item.task_id) || [];
+      existing.push({
+        title: item.title,
+        completed: Boolean(item.completed),
+        position: item.position,
+      });
+      checklistByTaskId.set(item.task_id, existing);
+    });
 
     const taskIds = Array.from(
       new Set(
@@ -103,6 +128,7 @@ export async function GET() {
               refinement_source: task.refinement_source,
               refinement_summary: task.refinement_summary,
               refined_at: task.refined_at,
+              checklist: checklistByTaskId.get(task.id) || [],
               position: task.position,
               priority: task.priority,
               labels: task.labels,
@@ -130,8 +156,8 @@ export async function GET() {
               test_summary: canonical?.test_evidence?.summary || null,
               review_verdict: canonical?.review_evidence?.verdict || null,
               review_summary: canonical?.review_evidence?.summary || null,
-              has_handoff_notes: Boolean(canonical?.handoff_notes),
-              handoff_notes: canonical?.handoff_notes || null,
+              has_handoff_notes: Boolean(task.handoff_notes || canonical?.handoff_notes),
+              handoff_notes: task.handoff_notes || canonical?.handoff_notes || null,
               failure_reason: canonical?.failure_reason || null,
               claimed_by: claimedBy,
               current_worker: currentWorker,
