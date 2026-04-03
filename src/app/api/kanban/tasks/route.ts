@@ -229,9 +229,10 @@ async function ensureChecklistForRefinedTask(args: {
 
 async function persistChecklistToCanonical(
   canonicalTaskId: string,
+  projectId: string | null | undefined,
   checklist: Array<{ title: string; completed: boolean; position: number }>
 ) {
-  const canonicalTask = await getCanonicalTask(canonicalTaskId);
+  const canonicalTask = await getCanonicalTask(canonicalTaskId, projectId);
   if (!canonicalTask) {
     return;
   }
@@ -248,11 +249,12 @@ async function persistChecklistToCanonical(
 
 async function persistCanonicalMetadata(
   canonicalTaskId: string,
+  projectId: string | null | undefined,
   updates: {
     handoff_notes?: string | null;
   }
 ) {
-  const canonicalTask = await getCanonicalTask(canonicalTaskId);
+  const canonicalTask = await getCanonicalTask(canonicalTaskId, projectId);
   if (!canonicalTask) {
     return;
   }
@@ -453,8 +455,8 @@ export async function POST(request: NextRequest) {
     }
     
     const sync = await syncKanbanTaskToCanonical(db, id);
-    await persistChecklistToCanonical(sync.canonicalTaskId, effectiveChecklist);
-    await persistCanonicalMetadata(sync.canonicalTaskId, {
+    await persistChecklistToCanonical(sync.canonicalTaskId, sync.projectId, effectiveChecklist);
+    await persistCanonicalMetadata(sync.canonicalTaskId, sync.projectId, {
       handoff_notes: handoff_notes !== undefined ? handoff_notes : undefined,
     });
     try {
@@ -654,8 +656,8 @@ export async function PUT(request: NextRequest) {
     }
     
     const sync = await syncKanbanTaskToCanonical(db, id);
-    await persistChecklistToCanonical(sync.canonicalTaskId, effectiveChecklist);
-    await persistCanonicalMetadata(sync.canonicalTaskId, {
+    await persistChecklistToCanonical(sync.canonicalTaskId, sync.projectId, effectiveChecklist);
+    await persistCanonicalMetadata(sync.canonicalTaskId, sync.projectId, {
       handoff_notes: handoff_notes !== undefined ? handoff_notes : undefined,
     });
     try {

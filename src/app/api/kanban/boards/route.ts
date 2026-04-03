@@ -102,15 +102,22 @@ export async function GET() {
       checklistByTaskId.set(item.task_id, existing);
     });
 
-    const taskIds = Array.from(
+    const taskRefs = Array.from(
       new Set(
         tasks
-          .map((task: any) => task.canonical_task_id)
+          .map((task: any) =>
+            task.canonical_task_id && task.project_id
+              ? `${task.project_id}:${task.canonical_task_id}`
+              : null
+          )
           .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0)
       )
     );
     const canonicalEntries = await Promise.all(
-      taskIds.map(async (taskId) => [taskId, await getCanonicalTask(taskId)] as const)
+      taskRefs.map(async (taskRef) => {
+        const [projectId, taskId] = taskRef.split(':', 2);
+        return [taskRef, await getCanonicalTask(taskId, projectId)] as const;
+      })
     );
     const canonicalById = new Map(canonicalEntries);
     
@@ -122,7 +129,10 @@ export async function GET() {
         .map((col: Column) => ({
           ...col,
           tasks: tasks.filter((task: any) => task.column_id === col.id).map((task: any) => {
-            const canonical = task.canonical_task_id ? canonicalById.get(task.canonical_task_id) : null;
+            const canonicalKey = task.canonical_task_id && task.project_id
+              ? `${task.project_id}:${task.canonical_task_id}`
+              : null;
+            const canonical = canonicalKey ? canonicalById.get(canonicalKey) : null;
             const claimedBy = canonical?.claimed_by || null;
             const currentWorker = claimedBy?.startsWith('dispatcher:')
               ? claimedBy.replace(/^dispatcher:/, '')

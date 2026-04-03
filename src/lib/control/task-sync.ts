@@ -256,7 +256,7 @@ function inferProject(boardName: string, projects: ProjectRegistryEntry[]): Proj
 }
 
 async function readCanonicalTask(projectId: string, taskId: string): Promise<CanonicalTask | null> {
-  return getCanonicalTask(taskId);
+  return getCanonicalTask(taskId, projectId);
 }
 
 async function nextTaskId(projectId: string): Promise<string> {
@@ -850,7 +850,15 @@ export async function autoSyncKanbanTaskToGithub(
   db: Database.Database,
   canonicalTaskId: string
 ): Promise<void> {
-  const result = await syncTaskToGithubIssue(canonicalTaskId);
+  const taskRow = db.prepare(
+    `
+      SELECT project_id
+      FROM tasks
+      WHERE canonical_task_id = ?
+      LIMIT 1
+    `
+  ).get(canonicalTaskId) as { project_id: string | null } | undefined;
+  const result = await syncTaskToGithubIssue(canonicalTaskId, taskRow?.project_id || null);
 
   db.prepare(
     `
