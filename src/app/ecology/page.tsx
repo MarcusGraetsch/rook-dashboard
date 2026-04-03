@@ -129,7 +129,7 @@ export default function EcologyPage() {
   const [expandedModel, setExpandedModel] = useState<string | null>(null)
   const [usingFallback, setUsingFallback] = useState(false)
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
-  const [tooltip, setTooltip] = useState<{key: string, x: number, y: number} | null>(null)
+  const [tooltip, setTooltip] = useState<{key: string, x: number, y: number, placement: 'top' | 'bottom'} | null>(null)
 
   // Fetch from metrics API
   useEffect(() => {
@@ -216,10 +216,17 @@ export default function EcologyPage() {
     )
   }
 
-  // Show tooltip on hover
+  // Show tooltip on hover - positioned based on available space
   function showTooltip(key: string, e: React.MouseEvent) {
     const rect = (e.target as HTMLElement).getBoundingClientRect()
-    setTooltip({ key, x: rect.left + rect.width / 2, y: rect.top })
+    const viewportHeight = window.innerHeight
+    const tooltipHeight = 200 // approximate tooltip height
+    
+    // Default to top, but if not enough space above, show below
+    const spaceAbove = rect.top
+    const placement = spaceAbove > tooltipHeight ? 'top' : 'bottom'
+    
+    setTooltip({ key, x: rect.left + rect.width / 2, y: rect.top, placement })
   }
 
   function hideTooltip() {
@@ -640,14 +647,14 @@ export default function EcologyPage() {
         </div>
       </div>
 
-      {/* Tooltip for metric explanations */}
+      {/* Tooltip for metric explanations - auto-positioned */}
       {tooltip && (
         <div 
           className="fixed z-50 bg-gray-900 border border-gray-600 rounded-lg p-4 shadow-xl"
           style={{ 
             left: tooltip.x, 
-            top: tooltip.y - 10,
-            transform: 'translate(-50%, -100%)',
+            top: tooltip.placement === 'top' ? tooltip.y - 10 : tooltip.y + 10,
+            transform: tooltip.placement === 'top' ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
             maxWidth: '400px'
           }}
         >
