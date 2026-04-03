@@ -179,10 +179,10 @@ function applySyncError(task: CanonicalTask, message: string): CanonicalTask {
   };
 }
 
-export async function syncTaskToGithubIssue(taskId: string): Promise<IssueSyncResult> {
-  const task = await getCanonicalTask(taskId);
+export async function syncTaskToGithubIssue(taskId: string, projectId?: string | null): Promise<IssueSyncResult> {
+  const task = await getCanonicalTask(taskId, projectId);
   if (!task) {
-    throw new Error(`Canonical task not found: ${taskId}`);
+    throw new Error(`Canonical task not found: ${projectId ? `${projectId}/` : ''}${taskId}`);
   }
 
   try {

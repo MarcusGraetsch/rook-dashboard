@@ -140,10 +140,10 @@ function applyGitContextError(task: CanonicalTask, message: string) {
   };
 }
 
-export async function getTaskGitContext(taskId: string): Promise<TaskGitContext> {
-  const task = await getCanonicalTask(taskId);
+export async function getTaskGitContext(taskId: string, projectId?: string | null): Promise<TaskGitContext> {
+  const task = await getCanonicalTask(taskId, projectId);
   if (!task) {
-    throw new Error(`Canonical task not found: ${taskId}`);
+    throw new Error(`Canonical task not found: ${projectId ? `${projectId}/` : ''}${taskId}`);
   }
 
   try {

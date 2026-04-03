@@ -187,7 +187,26 @@ function applyRuntimeTaskState(
   return merged;
 }
 
-async function getTaskFileCandidates(taskId: string): Promise<string[]> {
+async function getTaskFileCandidates(taskId: string, projectId?: string | null): Promise<string[]> {
+  if (projectId) {
+    const scopedCandidates = [
+      path.join(TASKS_DIR, projectId, `${taskId}.json`),
+      path.join(ARCHIVE_TASKS_DIR, projectId, `${taskId}.json`),
+    ];
+    const matches: string[] = [];
+
+    for (const candidate of scopedCandidates) {
+      try {
+        await fs.access(candidate);
+        matches.push(candidate);
+      } catch {
+        // Ignore missing scoped candidates.
+      }
+    }
+
+    return matches;
+  }
+
   const roots = [TASKS_DIR, ARCHIVE_TASKS_DIR];
   const matches: string[] = [];
 
@@ -261,8 +280,8 @@ export async function getCanonicalTasks(): Promise<CanonicalTask[]> {
   });
 }
 
-export async function getCanonicalTask(taskId: string): Promise<CanonicalTask | null> {
-  const candidates = await getTaskFileCandidates(taskId);
+export async function getCanonicalTask(taskId: string, projectId?: string | null): Promise<CanonicalTask | null> {
+  const candidates = await getTaskFileCandidates(taskId, projectId);
   for (const candidate of candidates) {
     const task = await readTaskFile(candidate);
     if (task) {

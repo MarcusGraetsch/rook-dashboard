@@ -369,7 +369,11 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
       setGitContextError(null)
 
       try {
-        const res = await fetch(`/api/control/tasks/git?task_id=${encodeURIComponent(task.canonical_task_id)}`)
+        const params = new URLSearchParams({ task_id: task.canonical_task_id })
+        if (task.project_id) {
+          params.set('project_id', task.project_id)
+        }
+        const res = await fetch(`/api/control/tasks/git?${params.toString()}`)
         const json = await res.json()
 
         if (!res.ok) {
@@ -396,7 +400,7 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
     return () => {
       cancelled = true
     }
-  }, [task?.canonical_task_id, isOpen])
+  }, [task?.canonical_task_id, task?.project_id, isOpen])
 
   if (!isOpen) return null
 

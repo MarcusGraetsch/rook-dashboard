@@ -7,6 +7,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const taskId = body?.task_id;
+    const projectId = typeof body?.project_id === 'string' ? body.project_id : null;
 
     if (!taskId || typeof taskId !== 'string') {
       return NextResponse.json(
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await syncTaskToGithubIssue(taskId);
+    const result = await syncTaskToGithubIssue(taskId, projectId);
     const statusCode = result.sync_status === 'synced' ? 200 : 502;
 
     return NextResponse.json(
