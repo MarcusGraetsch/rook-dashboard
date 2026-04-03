@@ -160,8 +160,16 @@ export async function GET() {
     let totalHardwareCo2 = 0
     let totalCo2All = 0
 
+    // Normalize model IDs (handle short names vs full provider/model format)
+    const normalizeModelId = (id: string): string => {
+      if (!id) return 'unknown'
+      if (id === 'k2p5') return 'kimi-coding/k2p5'
+      if (id.startsWith('minimax-')) return id.replace(/minimax-/i, 'MiniMax-')
+      return id
+    }
+
     sessions.forEach((session: any) => {
-      const modelId = session.model || 'unknown'
+      const modelId = normalizeModelId(session.model || 'unknown')
       const inputTokens = session.contextTokens || 0
       const outputTokens = (session.totalTokens || 0) - inputTokens
 
