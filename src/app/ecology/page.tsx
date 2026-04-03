@@ -220,13 +220,48 @@ export default function EcologyPage() {
   function showTooltip(key: string, e: React.MouseEvent) {
     const rect = (e.target as HTMLElement).getBoundingClientRect()
     const viewportHeight = window.innerHeight
-    const tooltipHeight = 200 // approximate tooltip height
+    const viewportWidth = window.innerWidth
+    const tooltipHeight = 250 // approximate tooltip height with content
+    const tooltipWidth = 400 // max tooltip width
     
-    // Default to top, but if not enough space above, show below
+    // Check space above and below the element
     const spaceAbove = rect.top
-    const placement = spaceAbove > tooltipHeight ? 'top' : 'bottom'
+    const spaceBelow = viewportHeight - rect.bottom
     
-    setTooltip({ key, x: rect.left + rect.width / 2, y: rect.top, placement })
+    // Determine placement: prefer top but only if enough space
+    // Add 20px padding from viewport edge
+    let placement: 'top' | 'bottom' = 'bottom'
+    let adjustedY = rect.bottom
+    
+    if (spaceAbove > tooltipHeight + 20) {
+      placement = 'top'
+      adjustedY = rect.top
+    } else if (spaceBelow > tooltipHeight + 20) {
+      placement = 'bottom'
+      adjustedY = rect.bottom
+    } else {
+      // Neither has enough space - use whichever has more space
+      if (spaceAbove > spaceBelow) {
+        placement = 'top'
+        adjustedY = rect.top
+      } else {
+        placement = 'bottom'
+        adjustedY = rect.bottom
+      }
+    }
+    
+    // Horizontal positioning - ensure tooltip stays within viewport
+    let adjustedX = rect.left + rect.width / 2
+    const halfWidth = tooltipWidth / 2
+    
+    // Keep tooltip within horizontal bounds
+    if (adjustedX - halfWidth < 10) {
+      adjustedX = halfWidth + 10
+    } else if (adjustedX + halfWidth > viewportWidth - 10) {
+      adjustedX = viewportWidth - halfWidth - 10
+    }
+    
+    setTooltip({ key, x: adjustedX, y: adjustedY, placement })
   }
 
   function hideTooltip() {
