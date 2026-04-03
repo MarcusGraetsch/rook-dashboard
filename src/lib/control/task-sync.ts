@@ -283,6 +283,39 @@ function buildBranch(taskId: string, assignedAgent: CanonicalTask['assigned_agen
   return `agent/${assignedAgent}/${taskId}-${safeSlug(title)}`;
 }
 
+function isActiveStatus(status: TaskStatus | null | undefined): boolean {
+  return status === 'in_progress' || status === 'testing' || status === 'review';
+}
+
+function shouldRegenerateBranch(
+  existing: CanonicalTask | null,
+  nextAssignedAgent: CanonicalTask['assigned_agent'],
+  nextTitle: string
+): boolean {
+  if (!existing) {
+    return true;
+  }
+
+  if (Array.isArray(existing.commits) && existing.commits.length > 0) {
+    return false;
+  }
+
+  if (existing.github_pull_request?.number || existing.github_pull_request?.url) {
+    return false;
+  }
+
+  if (existing.claimed_by || isActiveStatus(existing.status)) {
+    return false;
+  }
+
+  const expectedCurrentBranch = buildBranch(existing.task_id, existing.assigned_agent, existing.title);
+  if (existing.branch && existing.branch !== expectedCurrentBranch) {
+    return false;
+  }
+
+  return existing.assigned_agent !== nextAssignedAgent || existing.title !== nextTitle;
+}
+
 function nextTimestamps(
   existing: CanonicalTask | null,
   status: TaskStatus,
@@ -369,6 +402,12 @@ export async function syncKanbanTaskToCanonical(
     ? coerceAgent(task.assignee)
     : (existing?.assigned_agent || (status === 'intake' ? 'coach' : 'rook'));
   const nowIso = new Date().toISOString();
+  const statusChanged = existing ? existing.status !== status : false;
+  const leavingBlocked = status !== 'blocked';
+  const leavingActiveStage = statusChanged && !isActiveStatus(status);
+  const nextBranch = shouldRegenerateBranch(existing, assignedAgent, task.title)
+    ? buildBranch(canonicalTaskId, assignedAgent, task.title)
+    : (existing?.branch || buildBranch(canonicalTaskId, assignedAgent, task.title));
 
   const canonicalTask: CanonicalTask = {
     task_id: canonicalTaskId,
@@ -385,12 +424,12 @@ export async function syncKanbanTaskToCanonical(
     },
     status,
     assigned_agent: assignedAgent,
-    claimed_by: existing?.claimed_by || null,
+    claimed_by: leavingActiveStage ? null : (existing?.claimed_by || null),
     priority: task.priority || existing?.priority || 'medium',
     dependencies: existing?.dependencies || [],
-    blocked_by: existing?.blocked_by || [],
+    blocked_by: leavingBlocked ? [] : (existing?.blocked_by || []),
     related_repo: project.related_repo,
-    branch: existing?.branch || buildBranch(canonicalTaskId, assignedAgent, task.title),
+    branch: nextBranch,
     commits: existing?.commits || [],
     commit_refs: existing?.commit_refs || existing?.commits || [],
     labels,
@@ -398,10 +437,10 @@ export async function syncKanbanTaskToCanonical(
     blocked_reason:
       status === 'blocked'
         ? existing?.blocked_reason || 'Blocked in Kanban column.'
-        : existing?.blocked_reason || null,
+        : null,
     handoff_notes: task.handoff_notes || existing?.handoff_notes || '',
     last_heartbeat: existing?.last_heartbeat || null,
-    failure_reason: existing?.failure_reason || null,
+    failure_reason: leavingBlocked ? null : (existing?.failure_reason || null),
     source_channel: existing?.source_channel || null,
     artifacts: existing?.artifacts || [],
     checklist: checklist.map((entry) => ({
@@ -429,7 +468,7 @@ export async function syncKanbanTaskToCanonical(
     },
     timestamps: {
       ...nextTimestamps(existing, status, nowIso),
-      claimed_at: existing?.timestamps.claimed_at || null,
+      claimed_at: leavingActiveStage ? null : (existing?.timestamps.claimed_at || null),
     },
   };
 

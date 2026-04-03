@@ -97,6 +97,20 @@ const GIT_ACTIVITY_CLASSES: Record<TaskGitContext['activity_status'], string> = 
   error: 'bg-red-900/50 text-red-300',
 }
 
+function normalizeTestStatus(status: string | null | undefined) {
+  const normalized = String(status || '').trim().toLowerCase()
+  if (normalized === 'pass') return 'passed'
+  if (normalized === 'passed' || normalized === 'failed') return normalized
+  return null
+}
+
+function normalizeReviewVerdict(verdict: string | null | undefined) {
+  const normalized = String(verdict || '').trim().toLowerCase()
+  if (normalized === 'pass') return 'approved'
+  if (normalized === 'approved' || normalized === 'changes_requested') return normalized
+  return null
+}
+
 interface Props {
   task: Task | null
   isOpen: boolean
@@ -389,12 +403,18 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
   const isDoneTask = task?.column_name?.toLowerCase() === 'done'
   const selectedProject = projects.find((project) => project.project_id === projectId) || null
   const hasCommits = (gitContext?.commits?.length || 0) > 0
+  const normalizedTestStatus = normalizeTestStatus(task?.test_status)
+  const normalizedReviewVerdict = normalizeReviewVerdict(task?.review_verdict)
+  const gitActivityStatus =
+    gitContext?.activity_status === 'error' && (gitContext?.pull_request?.state === 'merged' || task?.pr_state === 'merged' || isDoneTask)
+      ? 'merged'
+      : (gitContext?.activity_status || 'planned')
   const evidenceState = {
     handoff: Boolean(task?.has_handoff_notes),
     commits: hasCommits,
     pr: Boolean(gitContext?.pull_request?.number),
-    tests: task?.test_status === 'passed',
-    review: task?.review_verdict === 'approved',
+    tests: normalizedTestStatus === 'passed',
+    review: normalizedReviewVerdict === 'approved',
   }
 
   async function handleRefine() {
@@ -748,9 +768,9 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
                 <div>
                   <p className="text-gray-500">Git Activity</p>
                   <span
-                    className={`inline-block rounded px-2 py-1 text-xs ${GIT_ACTIVITY_CLASSES[gitContext?.activity_status || 'planned']}`}
+                    className={`inline-block rounded px-2 py-1 text-xs ${GIT_ACTIVITY_CLASSES[gitActivityStatus]}`}
                   >
-                    {GIT_ACTIVITY_LABELS[gitContext?.activity_status || 'planned']}
+                    {GIT_ACTIVITY_LABELS[gitActivityStatus]}
                   </span>
                 </div>
               </div>
@@ -770,20 +790,20 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
                 </div>
                 <div>
                   <p className="text-gray-500">Test Evidence</p>
-                  <p className={task.test_status === 'passed' ? 'text-green-300' : task.test_status === 'failed' ? 'text-red-300' : 'text-gray-300'}>
-                    {task.test_status === 'passed'
+                  <p className={normalizedTestStatus === 'passed' ? 'text-green-300' : normalizedTestStatus === 'failed' ? 'text-red-300' : 'text-gray-300'}>
+                    {normalizedTestStatus === 'passed'
                       ? 'Passed'
-                      : task.test_status === 'failed'
+                      : normalizedTestStatus === 'failed'
                         ? 'Failed'
                         : 'No recorded test result'}
                   </p>
                 </div>
                 <div>
                   <p className="text-gray-500">Review Verdict</p>
-                  <p className={task.review_verdict === 'approved' ? 'text-green-300' : task.review_verdict === 'changes_requested' ? 'text-red-300' : 'text-gray-300'}>
-                    {task.review_verdict === 'approved'
+                  <p className={normalizedReviewVerdict === 'approved' ? 'text-green-300' : normalizedReviewVerdict === 'changes_requested' ? 'text-red-300' : 'text-gray-300'}>
+                    {normalizedReviewVerdict === 'approved'
                       ? 'Approved'
-                      : task.review_verdict === 'changes_requested'
+                      : normalizedReviewVerdict === 'changes_requested'
                         ? 'Changes requested'
                         : 'No recorded review verdict'}
                   </p>
@@ -871,7 +891,7 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
                 {gitContext?.pull_request?.state && (
                   <p className="text-xs text-gray-400">State: {gitContext.pull_request.state}</p>
                 )}
-                {gitContextError && <p className="text-red-300">{gitContextError}</p>}
+                {gitContextError && gitActivityStatus === 'error' && <p className="text-red-300">{gitContextError}</p>}
               </div>
 
               <div className="text-sm space-y-2">
