@@ -287,6 +287,29 @@ function isActiveStatus(status: TaskStatus | null | undefined): boolean {
   return status === 'in_progress' || status === 'testing' || status === 'review';
 }
 
+function nextHandoffNotes(
+  task: KanbanTaskContext,
+  existing: CanonicalTask | null,
+  status: TaskStatus,
+  statusChanged: boolean
+): string {
+  const kanbanNotes = (task.handoff_notes || '').trim();
+  if (kanbanNotes) {
+    return kanbanNotes;
+  }
+
+  if (status === 'blocked') {
+    return existing?.handoff_notes || '';
+  }
+
+  // Re-queueing from Kanban should not carry stale blocked/failed worker notes into a new run.
+  if (status === 'ready' || (statusChanged && !isActiveStatus(status))) {
+    return '';
+  }
+
+  return existing?.handoff_notes || '';
+}
+
 function shouldRegenerateBranch(
   existing: CanonicalTask | null,
   nextAssignedAgent: CanonicalTask['assigned_agent'],
@@ -438,8 +461,8 @@ export async function syncKanbanTaskToCanonical(
       status === 'blocked'
         ? existing?.blocked_reason || 'Blocked in Kanban column.'
         : null,
-    handoff_notes: task.handoff_notes || existing?.handoff_notes || '',
-    last_heartbeat: existing?.last_heartbeat || null,
+    handoff_notes: nextHandoffNotes(task, existing, status, statusChanged),
+    last_heartbeat: leavingBlocked || leavingActiveStage ? null : (existing?.last_heartbeat || null),
     failure_reason: leavingBlocked ? null : (existing?.failure_reason || null),
     source_channel: existing?.source_channel || null,
     artifacts: existing?.artifacts || [],
