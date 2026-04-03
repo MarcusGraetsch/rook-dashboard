@@ -126,6 +126,25 @@ function coerceAgent(assignee: string | null): CanonicalTask['assigned_agent'] {
   }
 }
 
+function normalizeAssignedAgent(
+  assignee: CanonicalTask['assigned_agent'],
+  title: string,
+  description: string | null,
+  labels: string[]
+): CanonicalTask['assigned_agent'] {
+  const text = `${title}\n${description || ''}`.toLowerCase();
+  const labelSet = new Set(labels.map((label) => label.toLowerCase()));
+  const looksImplementationHeavy =
+    /\b(implement|build|fix|code|ui|bug|feature|api|frontend|backend|database|route|endpoint)\b/.test(text)
+    || ['bug', 'ui', 'api', 'refactor', 'automation', 'data'].some((label) => labelSet.has(label));
+
+  if (assignee === 'consultant' && looksImplementationHeavy) {
+    return 'engineer';
+  }
+
+  return assignee;
+}
+
 function inferStatus(columnName: string): TaskStatus {
   const value = normalizeName(columnName);
 
@@ -421,9 +440,14 @@ export async function syncKanbanTaskToCanonical(
     `
   ).all(task.id) as KanbanChecklistItem[];
   const status = inferStatus(task.column_name);
-  const assignedAgent = task.assignee
+  const assignedAgent = normalizeAssignedAgent(
+    task.assignee
     ? coerceAgent(task.assignee)
-    : (existing?.assigned_agent || (status === 'intake' ? 'coach' : 'rook'));
+    : (existing?.assigned_agent || (status === 'intake' ? 'coach' : 'rook')),
+    task.title,
+    task.description,
+    labels
+  );
   const nowIso = new Date().toISOString();
   const statusChanged = existing ? existing.status !== status : false;
   const leavingBlocked = status !== 'blocked';

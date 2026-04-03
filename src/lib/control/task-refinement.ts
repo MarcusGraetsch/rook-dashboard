@@ -46,6 +46,16 @@ export type TicketRefinementResult = {
 };
 
 type WorkKind = 'engineering' | 'research' | 'consulting' | 'general';
+type Assignee =
+  | 'rook'
+  | 'coach'
+  | 'consultant'
+  | 'engineer'
+  | 'researcher'
+  | 'test'
+  | 'review'
+  | 'health'
+  | null;
 
 function splitSentences(input: string): string[] {
   return input
@@ -124,9 +134,6 @@ function inferAssignee(text: string): string | null {
   if (/\b(research|investigate|find out|compare|analyze|latest|trend|trends|development|developments)\b/.test(value) || /^(what|which|why|how)\b/.test(value.trim())) {
     return 'researcher';
   }
-  if (/(consult|consultancy|recommend|strategy|advise|advice|plan|scope|proposal|decision)/.test(value)) {
-    return 'consultant';
-  }
   if (/\b(test|verify|qa|regression|validate)\b/.test(value)) {
     return 'test';
   }
@@ -138,6 +145,9 @@ function inferAssignee(text: string): string | null {
   }
   if (/\b(build|implement|code|fix|ui|bug|feature|api|db|database|frontend|backend)\b/.test(value)) {
     return 'engineer';
+  }
+  if (/(consult|consultancy|recommend|strategy|advise|advice|plan|scope|proposal|decision)/.test(value)) {
+    return 'consultant';
   }
   return 'rook';
 }
@@ -179,6 +189,30 @@ function inferWorkKind(text: string): WorkKind {
     return 'engineering';
   }
   return 'general';
+}
+
+function normalizeAssigneeForWorkKind(
+  assignee: string | null | undefined,
+  workKind: WorkKind,
+  text: string,
+  labels: string[]
+): Assignee {
+  const normalized = (assignee ? String(assignee).trim().toLowerCase() : null) as Assignee;
+  const labelSet = new Set(labels.map((label) => String(label).trim().toLowerCase()));
+  const looksImplementationHeavy =
+    workKind === 'engineering'
+    || /\b(implement|build|fix|code|ui|bug|feature|api|frontend|backend|database|route|endpoint)\b/.test(text.toLowerCase())
+    || ['bug', 'ui', 'api', 'refactor', 'automation', 'data'].some((label) => labelSet.has(label));
+
+  if (looksImplementationHeavy && (normalized === 'consultant' || normalized === 'rook' || normalized === null)) {
+    return 'engineer';
+  }
+
+  if (workKind === 'consulting' && (normalized === null || normalized === 'rook')) {
+    return 'consultant';
+  }
+
+  return normalized;
 }
 
 function parseChecklistFromBrief(input: string): string[] {
@@ -535,19 +569,31 @@ export async function refineTaskDraft(input: TicketRefinementInput): Promise<Tic
   const fallbackChecklist = buildChecklist(baseText, refinedFallbackTitle, workKind);
   const fallbackLabels = unique([...(input.labels || []), ...inferLabels(baseText)]);
   const fallbackPriority = input.priority || inferPriority(baseText);
-  const fallbackAssignee = input.assignee || inferAssignee(baseText);
+  const fallbackAssignee = normalizeAssigneeForWorkKind(
+    input.assignee || inferAssignee(baseText),
+    workKind,
+    baseText,
+    fallbackLabels
+  );
+  const resolvedLabels = unique(
+    [...(Array.isArray(agentResult?.labels) ? agentResult?.labels : []), ...fallbackLabels]
+      .map((label) => normalizeWhitespace(label).toLowerCase())
+      .filter(Boolean)
+  );
+  const resolvedAssignee = normalizeAssigneeForWorkKind(
+    agentResult?.assignee === undefined ? fallbackAssignee : agentResult.assignee,
+    workKind,
+    baseText,
+    resolvedLabels
+  );
 
   return {
     title: toTitle(agentResult?.title || refinedFallbackTitle || fallbackTitle),
     description: normalizeMultiline(agentResult?.description || fallbackDescription),
     intake_brief: intakeBrief || fallbackDescription,
     priority: agentResult?.priority || fallbackPriority,
-    assignee: agentResult?.assignee === undefined ? fallbackAssignee : agentResult.assignee,
-    labels: unique(
-      [...(Array.isArray(agentResult?.labels) ? agentResult?.labels : []), ...fallbackLabels]
-        .map((label) => normalizeWhitespace(label).toLowerCase())
-        .filter(Boolean)
-    ),
+    assignee: resolvedAssignee,
+    labels: resolvedLabels,
     checklist:
       Array.isArray(agentResult?.checklist) && agentResult.checklist.length > 0
         ? agentResult.checklist.slice(0, 8).map((item, index) => ({
