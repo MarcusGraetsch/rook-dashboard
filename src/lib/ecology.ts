@@ -44,6 +44,13 @@ export const MODEL_ECOLOGY: Record<string, EcologicalMetrics> = {
     waterMl: 150,
     hardwareLifecycleFactor: 1.8,
   },
+  'MiniMax-M2.5': {
+    modelId: 'MiniMax-M2.5',
+    energyKwh: 0.15,
+    co2G: 45,
+    waterMl: 150,
+    hardwareLifecycleFactor: 1.8,
+  },
   'gpt-4': {
     modelId: 'gpt-4',
     energyKwh: 0.65, // Larger model, higher energy

@@ -1,56 +1,145 @@
 import { NextResponse } from 'next/server';
 import { calculateEcologicalImpact, MODEL_ECOLOGY, MODEL_SOCIAL } from '@/lib/ecology';
+import * as fs from 'fs';
+import * as path from 'path';
 
-const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || 'e860d5a94d6b9558093c05fa0d4b3018092db93ec5755e6a';
-const GATEWAY_URL = process.env.GATEWAY_URL || 'http://localhost:18789';
+const AGENTS_DIR = process.env.AGENTS_DIR || '/root/.openclaw/agents';
 
-async function gatewayInvoke(tool: string, args: Record<string, any> = {}) {
-  const res = await fetch(`${GATEWAY_URL}/tools/invoke`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${GATEWAY_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ tool, args }),
-  });
+// Read session data from local agent session files
+async function getLocalSessions(): Promise<any[]> {
+  const sessions: any[] = [];
+  const agentsDir = AGENTS_DIR;
   
-  if (!res.ok) throw new Error(`Gateway error: ${res.status}`);
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.error?.message || 'Unknown error');
-  return data.result;
+  try {
+    const agentDirs = fs.readdirSync(agentsDir, { withFileTypes: true })
+      .filter(d => d.isDirectory());
+    
+    for (const agentDir of agentDirs) {
+      const sessionsFile = path.join(agentsDir, agentDir.name, 'sessions', 'sessions.json');
+      if (fs.existsSync(sessionsFile)) {
+        try {
+          const content = fs.readFileSync(sessionsFile, 'utf-8');
+          const data = JSON.parse(content);
+          
+          // Extract sessions from the sessions.json format
+          Object.values(data).forEach((session: any) => {
+            if (session.sessionId && session.model) {
+              sessions.push({
+                sessionId: session.sessionId,
+                model: session.model,
+                modelProvider: session.modelProvider,
+                contextTokens: session.contextTokens || 0,
+                inputTokens: session.inputTokens || 0,
+                outputTokens: session.outputTokens || 0,
+                totalTokens: session.totalTokens || 0,
+                label: session.label || '',
+              });
+            }
+          });
+        } catch (e) {
+          // Skip malformed files
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Error reading agent sessions:', e);
+  }
+  
+  return sessions;
+}
+
+// Get infrastructure metrics from the system
+async function getInfrastructureMetrics(): Promise<{
+  cpuHours: number;
+  memoryGbHours: number;
+  diskGbRead: number;
+  diskGbWrite: number;
+  networkMb: number;
+}> {
+  // Estimate based on system uptime and average resource usage
+  // In a production system, this would come from actual monitoring (Prometheus, etc.)
+  
+  try {
+    // Read uptime
+    const uptime = fs.readFileSync('/proc/uptime', 'utf-8');
+    const uptimeSeconds = parseFloat(uptime.split(' ')[0]);
+    const uptimeHours = uptimeSeconds / 3600;
+    
+    // Estimate: 2 vCPUs average at ~20% utilization
+    const cpuHours = uptimeHours * 2 * 0.2;
+    
+    // Estimate: ~2GB RAM average
+    const memoryGbHours = uptimeHours * 2;
+    
+    // Estimate: minimal disk I/O for a containerized agent system
+    const diskGbRead = uptimeHours * 0.1;
+    const diskGbWrite = uptimeHours * 0.05;
+    
+    // Estimate: ~50MB/hour for API calls, logs, etc.
+    const networkMb = uptimeHours * 50;
+    
+    return { cpuHours, memoryGbHours, diskGbRead, diskGbWrite, networkMb };
+  } catch (e) {
+    // Fallback for non-Linux systems
+    return { cpuHours: 0, memoryGbHours: 0, diskGbRead: 0, diskGbWrite: 0, networkMb: 0 };
+  }
+}
+
+// Calculate infrastructure carbon footprint
+function calculateInfrastructureImpact(cpuHours: number, memoryGbHours: number, networkMb: number) {
+  // Estimates based on recent studies (Ko et al., 2023; Ligo Sustainable AI)
+  // CPU: ~0.05 kWh per core-hour (average server CPU)
+  // Memory: ~0.005 kWh per GB-hour
+  // Network: ~0.001 kWh per MB transferred
+  
+  const cpuKwh = cpuHours * 0.05;
+  const memoryKwh = memoryGbHours * 0.005;
+  const networkKwh = (networkMb / 1024) * 0.001;
+  
+  const totalKwh = cpuKwh + memoryKwh + networkKwh;
+  
+  // Average grid emission: ~400 gCO2/kWh (global average)
+  // For Berlin/germany: ~350 gCO2/kWh
+  const co2G = totalKwh * 400;
+  
+  // Water for cooling: ~0.5L per kWh (average data center)
+  const waterMl = totalKwh * 500;
+  
+  return { energyKwh: totalKwh, co2G, waterMl };
 }
 
 // GET /api/ecology - Get ecological impact for all sessions
 export async function GET() {
   try {
-    let sessions: any[] = [];
+    // Try local sessions first (more reliable than gateway)
+    let sessions = await getLocalSessions();
+    const usingFallback = sessions.length === 0;
     
-    try {
-      // Get sessions with token data from gateway
-      const sessionsResult = await gatewayInvoke('sessions_list', { limit: 100 });
-      const sessionsData = JSON.parse(sessionsResult.content[0].text);
-      sessions = sessionsData.sessions || [];
-    } catch (gatewayError: any) {
-      // Gateway tool doesn't exist - return empty/fallback data
-      if (gatewayError.message?.includes('not available') || gatewayError.message?.includes('404')) {
-        return NextResponse.json({
-          summary: {
-            totalEnergyKwh: 0,
-            totalCo2G: 0,
-            totalWaterMl: 0,
-            totalHardwareCo2G: 0,
-            totalCo2AllG: 0,
-            co2EquivalentDescription: 'Keine Daten verfügbar',
-            sessionCount: 0,
+    // Also try gateway as secondary source if local is empty
+    if (sessions.length === 0) {
+      try {
+        const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || 'e860d5a94d6b9558093c05fa0d4b3018092db93ec5755e6a';
+        const GATEWAY_URL = process.env.GATEWAY_URL || 'http://localhost:18789';
+        
+        const res = await fetch(`${GATEWAY_URL}/tools/invoke`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${GATEWAY_TOKEN}`,
+            'Content-Type': 'application/json',
           },
-          byModel: [],
-          availableModels: Object.keys(MODEL_ECOLOGY),
-          socialMetrics: MODEL_SOCIAL,
-          fallback: true,
-          message: 'Gateway sessions_list tool not available',
+          body: JSON.stringify({ tool: 'sessions_list', args: { limit: 100 } }),
         });
+        
+        if (res.ok) {
+          const data = await res.json();
+          if (data.ok && data.result?.content) {
+            const sessionsData = JSON.parse(data.result.content[0].text);
+            sessions = sessionsData.sessions || [];
+          }
+        }
+      } catch (gatewayError) {
+        // Ignore gateway errors, use local sessions
       }
-      throw gatewayError;
     }
 
     // Calculate impact per model
@@ -106,6 +195,20 @@ export async function GET() {
       totalCo2All += impact.totalCo2G
     })
 
+    // Calculate infrastructure impact (VM/resources)
+    const infraMetrics = await getInfrastructureMetrics();
+    const infraImpact = calculateInfrastructureImpact(
+      infraMetrics.cpuHours,
+      infraMetrics.memoryGbHours,
+      infraMetrics.networkMb
+    );
+
+    // Add infrastructure impact to totals
+    totalEnergy += infraImpact.energyKwh;
+    totalCo2 += infraImpact.co2G;
+    totalWater += infraImpact.waterMl;
+    totalCo2All += infraImpact.co2G;
+
     // CO2 equivalents for context
     const co2Descriptions: Record<string, string> = {
       '10': '≈ 50km Auto fahren',
@@ -134,9 +237,19 @@ export async function GET() {
         co2EquivalentDescription: getCo2Description(totalCo2All),
         sessionCount: sessions.length,
       },
+      infrastructure: {
+        cpuHours: infraMetrics.cpuHours,
+        memoryGbHours: infraMetrics.memoryGbHours,
+        networkMb: infraMetrics.networkMb,
+        energyKwh: infraImpact.energyKwh,
+        co2G: infraImpact.co2G,
+        waterMl: infraImpact.waterMl,
+      },
       byModel: Object.values(modelImpacts),
       availableModels: Object.keys(MODEL_ECOLOGY),
       socialMetrics: MODEL_SOCIAL,
+      usingLocalSessions: true,
+      fallback: usingFallback && sessions.length === 0,
     })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
