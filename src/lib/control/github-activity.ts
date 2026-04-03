@@ -176,6 +176,25 @@ export async function getTaskGitContext(taskId: string): Promise<TaskGitContext>
     };
   } catch (error: any) {
     const message = error?.message || 'GitHub branch context lookup failed.';
+    if (task.github_pull_request?.state === 'merged') {
+      return {
+        branch: task.branch,
+        related_repo: task.related_repo,
+        branch_exists: false,
+        activity_status: 'merged',
+        issue: task.github_issue || null,
+        pull_request: task.github_pull_request || null,
+        commits: (task.commits || []).map((sha) => ({
+          sha,
+          short_sha: toShortSha(sha),
+          message: 'Stored canonical commit',
+          url: task.related_repo
+            ? `https://github.com/${task.related_repo}/commit/${sha}`
+            : null,
+          committed_at: null,
+        })),
+      };
+    }
     const updated = applyGitContextError(task, message);
     await writeCanonicalTask(updated);
 

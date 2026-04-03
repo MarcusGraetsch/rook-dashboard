@@ -86,6 +86,20 @@ const SYNC_STATUS_CLASSES: Record<string, string> = {
   local_only: 'bg-gray-700 text-gray-300',
 }
 
+function normalizeTestStatus(status: string | null | undefined) {
+  const normalized = String(status || '').trim().toLowerCase()
+  if (normalized === 'pass') return 'passed'
+  if (normalized === 'passed' || normalized === 'failed') return normalized
+  return null
+}
+
+function normalizeReviewVerdict(verdict: string | null | undefined) {
+  const normalized = String(verdict || '').trim().toLowerCase()
+  if (normalized === 'pass') return 'approved'
+  if (normalized === 'approved' || normalized === 'changes_requested') return normalized
+  return null
+}
+
 export function KanbanCard({ task, isDragging, onUpdate, onDelete, onArchive }: Props) {
   const [showModal, setShowModal] = useState(false)
 
@@ -124,6 +138,8 @@ export function KanbanCard({ task, isDragging, onUpdate, onDelete, onArchive }: 
     labels = []
   }
   const isOverdue = task.due_date && new Date(task.due_date) < new Date()
+  const normalizedTestStatus = normalizeTestStatus(task.test_status)
+  const normalizedReviewVerdict = normalizeReviewVerdict(task.review_verdict)
 
   const priorityBorder = {
     low: 'border-l-gray-400',
@@ -264,23 +280,23 @@ export function KanbanCard({ task, isDragging, onUpdate, onDelete, onArchive }: 
                   </span>
                 ) : null}
 
-                {task.test_status ? (
+                {normalizedTestStatus ? (
                   <span className={`text-xs px-1.5 py-0.5 rounded ${
-                    task.test_status === 'passed'
+                    normalizedTestStatus === 'passed'
                       ? 'bg-green-900/50 text-green-300'
                       : 'bg-red-900/50 text-red-300'
                   }`}>
-                    Tests {task.test_status}
+                    Tests {normalizedTestStatus}
                   </span>
                 ) : null}
 
-                {task.review_verdict ? (
+                {normalizedReviewVerdict ? (
                   <span className={`text-xs px-1.5 py-0.5 rounded ${
-                    task.review_verdict === 'approved'
+                    normalizedReviewVerdict === 'approved'
                       ? 'bg-green-900/50 text-green-300'
                       : 'bg-red-900/50 text-red-300'
                   }`}>
-                    Review {task.review_verdict === 'approved' ? 'approved' : 'changes requested'}
+                    Review {normalizedReviewVerdict === 'approved' ? 'approved' : 'changes requested'}
                   </span>
                 ) : null}
 

@@ -23,6 +23,20 @@ function normalizeName(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+function normalizeTestStatus(status: string | null | undefined) {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (normalized === 'pass') return 'passed';
+  if (normalized === 'passed' || normalized === 'failed') return normalized;
+  return null;
+}
+
+function normalizeReviewVerdict(verdict: string | null | undefined) {
+  const normalized = String(verdict || '').trim().toLowerCase();
+  if (normalized === 'pass') return 'approved';
+  if (normalized === 'approved' || normalized === 'changes_requested') return normalized;
+  return null;
+}
+
 interface ChecklistItem {
   task_id: string;
   title: string;
@@ -151,10 +165,10 @@ export async function GET() {
               commit_count: Array.isArray(canonical?.commits) ? canonical.commits.length : 0,
               pr_state: canonical?.github_pull_request?.state || null,
               pr_number: canonical?.github_pull_request?.number || null,
-              test_status: canonical?.test_evidence?.status || null,
+              test_status: normalizeTestStatus(canonical?.test_evidence?.status),
               test_commands: canonical?.test_evidence?.commands || [],
               test_summary: canonical?.test_evidence?.summary || null,
-              review_verdict: canonical?.review_evidence?.verdict || null,
+              review_verdict: normalizeReviewVerdict(canonical?.review_evidence?.verdict),
               review_summary: canonical?.review_evidence?.summary || null,
               has_handoff_notes: Boolean(task.handoff_notes || canonical?.handoff_notes),
               handoff_notes: task.handoff_notes || canonical?.handoff_notes || null,
