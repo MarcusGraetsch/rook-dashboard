@@ -23,6 +23,7 @@ import { Plus, Layout } from 'lucide-react'
 interface Task {
   id: string
   column_id: string
+  target_board_id?: string | null
   target_status?: 'intake' | 'ready' | 'backlog' | 'in_progress' | 'testing' | 'review' | 'blocked' | 'done'
   title: string
   description: string | null
@@ -100,11 +101,29 @@ function statusToColumnName(status: string | null | undefined): string | null {
 
 export function KanbanBoard() {
   const [boards, setBoards] = useState<Board[]>([])
-  const [activeBoard, setActiveBoard] = useState<Board | null>(null)
+  const [activeBoardId, setActiveBoardId] = useState<string | null>(null)
   const [activeTask, setActiveTask] = useState<Task | null>(null)
   const [loading, setLoading] = useState(true)
   const [showNewBoard, setShowNewBoard] = useState(false)
   const [newBoardName, setNewBoardName] = useState('')
+  const activeBoard = activeBoardId
+    ? boards.find((board) => board.id === activeBoardId) || null
+    : null
+  const activeBoardStorageKey = 'rook-dashboard.active-board-id'
+
+  function readStoredBoardId(): string | null {
+    if (typeof window === 'undefined') return null
+    return window.localStorage.getItem(activeBoardStorageKey)
+  }
+
+  function writeStoredBoardId(boardId: string | null) {
+    if (typeof window === 'undefined') return
+    if (boardId) {
+      window.localStorage.setItem(activeBoardStorageKey, boardId)
+      return
+    }
+    window.localStorage.removeItem(activeBoardStorageKey)
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -116,6 +135,7 @@ export function KanbanBoard() {
   )
 
   useEffect(() => {
+    setActiveBoardId(readStoredBoardId())
     fetchBoards()
   }, [])
 
@@ -133,14 +153,22 @@ export function KanbanBoard() {
       if (res.ok) {
         const data = await res.json()
         setBoards(data)
-        if (data.length === 0) {
-          setActiveBoard(null)
-        } else if (!activeBoard) {
-          setActiveBoard(data[0])
-        } else {
-          const refreshedActiveBoard = data.find((board: Board) => board.id === activeBoard.id)
-          setActiveBoard(refreshedActiveBoard || data[0])
-        }
+        setActiveBoardId((currentBoardId) => {
+          if (data.length === 0) {
+            writeStoredBoardId(null)
+            return null
+          }
+          const preferredBoardId = currentBoardId || readStoredBoardId()
+          if (preferredBoardId) {
+            const hasPreferredBoard = data.some((board: Board) => board.id === preferredBoardId)
+            if (hasPreferredBoard) {
+              writeStoredBoardId(preferredBoardId)
+              return preferredBoardId
+            }
+          }
+          writeStoredBoardId(data[0].id)
+          return data[0].id
+        })
       }
     } catch (e) {
       console.error('Failed to fetch boards:', e)
@@ -178,8 +206,9 @@ export function KanbanBoard() {
       })
       
       if (res.ok) {
-        if (activeBoard?.id === boardId) {
-          setActiveBoard(null)
+        if (activeBoardId === boardId) {
+          setActiveBoardId(null)
+          writeStoredBoardId(null)
         }
         fetchBoards()
       }
@@ -314,7 +343,6 @@ export function KanbanBoard() {
 
   function updateBoardState(transform: (board: Board) => Board) {
     setBoards((currentBoards) => currentBoards.map(transform))
-    setActiveBoard((currentBoard) => (currentBoard ? transform(currentBoard) : currentBoard))
   }
 
   function applyTaskMoveLocally(taskId: string, targetColumnId: string, targetPosition: number) {
@@ -476,7 +504,10 @@ export function KanbanBoard() {
             {boards.map(board => (
               <div key={board.id} className="flex items-center gap-1">
                 <button
-                  onClick={() => setActiveBoard(board)}
+                  onClick={() => {
+                    setActiveBoardId(board.id)
+                    writeStoredBoardId(board.id)
+                  }}
                   className={`px-3 py-1 rounded text-sm ${
                     activeBoard?.id === board.id 
                       ? 'bg-highlight text-white' 
@@ -548,6 +579,7 @@ export function KanbanBoard() {
                   <KanbanColumn
                     key={column.id}
                     column={column}
+                    boards={boards.map((board) => ({ id: board.id, name: board.name }))}
                     onAddTask={(colId, title, data) => createTask(colId, title, data)}
                     onUpdateTask={(taskId, updates) => updateTask(taskId, updates)}
                     onDeleteTask={(taskId) => deleteTask(taskId)}

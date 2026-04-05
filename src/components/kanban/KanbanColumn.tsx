@@ -10,6 +10,7 @@ import { Plus, X } from 'lucide-react'
 interface Task {
   id: string
   column_id: string
+  target_board_id?: string | null
   target_status?: 'intake' | 'ready' | 'backlog' | 'in_progress' | 'testing' | 'review' | 'blocked' | 'done'
   title: string
   description: string | null
@@ -49,15 +50,21 @@ interface Column {
   tasks: Task[]
 }
 
+interface BoardOption {
+  id: string
+  name: string
+}
+
 interface Props {
   column: Column
+  boards?: BoardOption[]
   onAddTask: (columnId: string, title: string, data: Partial<Task>) => void
   onUpdateTask: (taskId: string, updates: Partial<Task>) => void
   onDeleteTask: (taskId: string) => void
   onArchiveTask: (taskId: string) => void
 }
 
-export function KanbanColumn({ column, onAddTask, onUpdateTask, onDeleteTask, onArchiveTask }: Props) {
+export function KanbanColumn({ column, boards = [], onAddTask, onUpdateTask, onDeleteTask, onArchiveTask }: Props) {
   const [isAdding, setIsAdding] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [showFullModal, setShowFullModal] = useState(false)
@@ -122,6 +129,8 @@ export function KanbanColumn({ column, onAddTask, onUpdateTask, onDeleteTask, on
                 <KanbanCard
                   key={task.id}
                   task={task}
+                  boards={boards}
+                  currentBoardId={column.board_id}
                   onUpdate={onUpdateTask}
                   onDelete={onDeleteTask}
                   onArchive={onArchiveTask}
@@ -186,6 +195,8 @@ export function KanbanColumn({ column, onAddTask, onUpdateTask, onDeleteTask, on
       <TaskModal
         task={null}
         isOpen={showFullModal}
+        boards={boards}
+        currentBoardId={column.board_id}
         onClose={() => setShowFullModal(false)}
         onSave={handleFullCreate}
       />

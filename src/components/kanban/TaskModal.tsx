@@ -9,6 +9,7 @@ import { SubTaskList } from './SubTaskList'
 interface Task {
   id: string
   column_id: string
+  target_board_id?: string | null
   target_status?: 'intake' | 'ready' | 'backlog' | 'in_progress' | 'testing' | 'review' | 'blocked' | 'done'
   title: string
   description: string | null
@@ -30,6 +31,7 @@ interface Task {
   github_issue_url?: string | null
   sync_status?: string | null
   sync_error?: string | null
+  canonical_status?: string | null
   commit_count?: number
   pr_state?: 'open' | 'closed' | 'merged' | null
   pr_number?: number | null
@@ -40,7 +42,10 @@ interface Task {
   review_summary?: string | null
   has_handoff_notes?: boolean
   handoff_notes?: string | null
+  blocked_reason?: string | null
   failure_reason?: string | null
+  card_warning?: string | null
+  pipeline_state?: 'running' | 'idle' | 'done' | 'blocked' | string | null
 }
 
 interface ProjectOption {
@@ -48,6 +53,11 @@ interface ProjectOption {
   name: string
   related_repo: string
   type: string
+}
+
+interface BoardOption {
+  id: string
+  name: string
 }
 
 interface TaskGitContext {
@@ -114,6 +124,8 @@ function normalizeReviewVerdict(verdict: string | null | undefined) {
 interface Props {
   task: Task | null
   isOpen: boolean
+  boards?: BoardOption[]
+  currentBoardId?: string | null
   onClose: () => void
   onSave: (task: Partial<Task>) => void
   onDelete?: () => void
@@ -270,7 +282,7 @@ function DatePicker({ value, onChange }: { value: string; onChange: (d: string) 
   )
 }
 
-export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }: Props) {
+export function TaskModal({ task, isOpen, boards = [], currentBoardId = null, onClose, onSave, onDelete, onArchive }: Props) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [intakeBrief, setIntakeBrief] = useState('')
@@ -280,6 +292,7 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
   const [dueDate, setDueDate] = useState('')
   const [projectId, setProjectId] = useState('')
   const [relatedRepo, setRelatedRepo] = useState('')
+  const [targetBoardId, setTargetBoardId] = useState('')
   const [handoffNotes, setHandoffNotes] = useState('')
   const [draftChecklist, setDraftChecklist] = useState<ChecklistDraftItem[]>([])
   const [refinementLoading, setRefinementLoading] = useState(false)
@@ -302,6 +315,7 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
       setDueDate(task.due_date || '')
       setProjectId(task.project_id || '')
       setRelatedRepo(task.related_repo || '')
+      setTargetBoardId(currentBoardId || '')
       setHandoffNotes(task.handoff_notes || '')
       setDraftChecklist(Array.isArray(task.checklist) ? task.checklist : [])
       setRefinementSource(task.refinement_source || null)
@@ -316,6 +330,7 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
       setDueDate('')
       setProjectId('')
       setRelatedRepo('')
+      setTargetBoardId(currentBoardId || '')
       setHandoffNotes('')
       setDraftChecklist([])
       setRefinementSource(null)
@@ -323,7 +338,7 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
     }
     setRefinementError(null)
     setRefinementLoading(false)
-  }, [task?.id, isOpen])
+  }, [task?.id, isOpen, currentBoardId])
 
   useEffect(() => {
     let cancelled = false
@@ -420,6 +435,10 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
     tests: normalizedTestStatus === 'passed',
     review: normalizedReviewVerdict === 'approved',
   }
+  const hasBlockedWarning = task?.pipeline_state === 'blocked' || task?.canonical_status === 'blocked'
+  const doneMetadataWarning = (gitContext?.pull_request?.state || task?.pr_state || null) !== 'merged'
+    && (gitActivityStatus === 'merged' || isDoneTask || task?.canonical_status === 'done')
+  const warningText = task?.card_warning || task?.failure_reason || task?.blocked_reason || null
 
   async function handleRefine() {
     const brief = intakeBrief.trim() || description.trim() || title.trim()
@@ -498,6 +517,7 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
       refined_at: refinementSource ? (task?.refined_at || new Date().toISOString()) : null,
       project_id: projectId || null,
       related_repo: relatedRepo || selectedProject?.related_repo || task?.related_repo || null,
+      target_board_id: targetBoardId || null,
       handoff_notes: handoffNotes.trim() || null,
       checklist: draftChecklist,
     })
@@ -520,6 +540,7 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
       refined_at: refinementSource ? (task?.refined_at || new Date().toISOString()) : null,
       project_id: projectId || null,
       related_repo: relatedRepo || selectedProject?.related_repo || task?.related_repo || null,
+      target_board_id: targetBoardId || null,
       handoff_notes: handoffNotes.trim() || null,
       checklist: draftChecklist,
       target_status: 'intake',
@@ -636,6 +657,25 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
           </div>
 
           <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Board</label>
+              <select
+                value={targetBoardId}
+                onChange={(e) => setTargetBoardId(e.target.value)}
+                className="w-full px-3 py-2 bg-primary border border-gray-600 rounded text-white"
+              >
+                <option value="">Aktuelles Board behalten</option>
+                {boards.map((board) => (
+                  <option key={board.id} value={board.id}>
+                    {board.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Board-Wechsel legt das Ticket zuerst im `Backlog` des Ziel-Boards ab.
+              </p>
+            </div>
+
             <div>
               <label className="block text-sm text-gray-400 mb-1">Project Registry Entry</label>
               <select
@@ -818,6 +858,19 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
                 <div className="rounded border border-red-900/50 bg-red-950/20 px-3 py-3 text-sm">
                   <p className="text-red-300 font-medium">Failure Reason</p>
                   <p className="mt-1 text-red-200">{task.failure_reason}</p>
+                </div>
+              )}
+
+              {warningText && (!task.failure_reason || doneMetadataWarning) && (
+                <div className={`rounded border px-3 py-3 text-sm ${
+                  hasBlockedWarning
+                    ? 'border-red-900/50 bg-red-950/20'
+                    : 'border-amber-900/50 bg-amber-950/20'
+                }`}>
+                  <p className={`font-medium ${hasBlockedWarning ? 'text-red-300' : 'text-amber-300'}`}>
+                    {hasBlockedWarning ? 'Blocked State' : 'Completion Warning'}
+                  </p>
+                  <p className={`mt-1 ${hasBlockedWarning ? 'text-red-200' : 'text-amber-200'}`}>{warningText}</p>
                 </div>
               )}
 

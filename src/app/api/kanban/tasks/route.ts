@@ -343,6 +343,7 @@ export async function POST(request: NextRequest) {
   try {
     const {
       column_id,
+      target_board_id,
       title,
       description,
       intake_brief,
@@ -363,9 +364,17 @@ export async function POST(request: NextRequest) {
     
     const db = getDb();
     let effectiveColumnId = column_id;
+    if (target_board_id) {
+      const backlogColumn = resolveWorkflowColumn(db, target_board_id, 'backlog');
+      if (!backlogColumn) {
+        return NextResponse.json({ error: 'Target board backlog column not found.' }, { status: 400 });
+      }
+      effectiveColumnId = backlogColumn.id;
+    }
     if (target_status) {
       const sourceColumn = getColumnRecord(db, column_id);
-      const resolved = sourceColumn ? resolveWorkflowColumn(db, sourceColumn.board_id, target_status) : null;
+      const targetBoardId = target_board_id || sourceColumn?.board_id;
+      const resolved = targetBoardId ? resolveWorkflowColumn(db, targetBoardId, target_status) : null;
       if (resolved) {
         effectiveColumnId = resolved.id;
       }
@@ -485,6 +494,7 @@ export async function PUT(request: NextRequest) {
     const {
       id,
       column_id,
+      target_board_id,
       title,
       description,
       intake_brief,
@@ -516,8 +526,15 @@ export async function PUT(request: NextRequest) {
     }
 
     let effectiveColumnId = column_id;
+    if (target_board_id) {
+      const backlogColumn = resolveWorkflowColumn(db, target_board_id, 'backlog');
+      if (!backlogColumn) {
+        return NextResponse.json({ error: 'Target board backlog column not found.' }, { status: 400 });
+      }
+      effectiveColumnId = backlogColumn.id;
+    }
     if (target_status) {
-      const resolved = resolveWorkflowColumn(db, currentTask.board_id, target_status);
+      const resolved = resolveWorkflowColumn(db, target_board_id || currentTask.board_id, target_status);
       if (!resolved) {
         return NextResponse.json({ error: `Workflow column missing for status "${target_status}".` }, { status: 400 });
       }

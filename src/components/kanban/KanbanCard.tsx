@@ -9,6 +9,7 @@ import { TaskModal } from './TaskModal'
 interface Task {
   id: string
   column_id: string
+  target_board_id?: string | null
   target_status?: 'intake' | 'ready' | 'backlog' | 'in_progress' | 'testing' | 'review' | 'blocked' | 'done'
   title: string
   description: string | null
@@ -40,13 +41,23 @@ interface Task {
   test_status?: 'passed' | 'failed' | null
   review_verdict?: 'approved' | 'changes_requested' | null
   has_handoff_notes?: boolean
+  blocked_reason?: string | null
+  failure_reason?: string | null
+  card_warning?: string | null
   claimed_by?: string | null
   current_worker?: string | null
   pipeline_state?: 'running' | 'idle' | 'done' | 'blocked' | string | null
 }
 
+interface BoardOption {
+  id: string
+  name: string
+}
+
 interface Props {
   task: Task
+  boards?: BoardOption[]
+  currentBoardId?: string | null
   isDragging?: boolean
   onUpdate?: (taskId: string, updates: Partial<Task>) => void
   onDelete?: (taskId: string) => void
@@ -100,7 +111,7 @@ function normalizeReviewVerdict(verdict: string | null | undefined) {
   return null
 }
 
-export function KanbanCard({ task, isDragging, onUpdate, onDelete, onArchive }: Props) {
+export function KanbanCard({ task, boards = [], currentBoardId = null, isDragging, onUpdate, onDelete, onArchive }: Props) {
   const [showModal, setShowModal] = useState(false)
 
   const {
@@ -175,6 +186,10 @@ export function KanbanCard({ task, isDragging, onUpdate, onDelete, onArchive }: 
       text: 'Pipeline idle',
     }
   })()
+  const hasBlockedWarning = task.pipeline_state === 'blocked' || task.canonical_status === 'blocked'
+  const doneWarning = (task.pipeline_state === 'done' || task.canonical_status === 'done' || task.column_name?.toLowerCase() === 'done')
+    && task.pr_state !== 'merged'
+  const warningText = task.card_warning || task.failure_reason || task.blocked_reason || null
 
   return (
     <>
@@ -206,6 +221,18 @@ export function KanbanCard({ task, isDragging, onUpdate, onDelete, onArchive }: 
               <p className="text-xs text-gray-400 mt-1 break-words line-clamp-2">
                 {task.description}
               </p>
+            )}
+
+            {warningText && (
+              <div className={`mt-2 rounded border px-2 py-2 text-xs ${
+                hasBlockedWarning
+                  ? 'border-red-900/60 bg-red-950/30 text-red-200'
+                  : doneWarning
+                    ? 'border-amber-900/60 bg-amber-950/30 text-amber-200'
+                    : 'border-slate-700 bg-slate-900/40 text-slate-200'
+              }`}>
+                {warningText}
+              </div>
             )}
             
             {/* Labels */}
@@ -350,6 +377,8 @@ export function KanbanCard({ task, isDragging, onUpdate, onDelete, onArchive }: 
       <TaskModal
         task={task}
         isOpen={showModal}
+        boards={boards}
+        currentBoardId={currentBoardId}
         onClose={() => setShowModal(false)}
         onSave={handleSave}
         onDelete={handleDelete}

@@ -84,6 +84,20 @@ interface KanbanProjectionRow {
   position: number;
 }
 
+interface BoardRow {
+  id: string;
+  name: string;
+}
+
+function looksLikeDashboardTask(text: string, labels: string[] = []): boolean {
+  const value = text.toLowerCase();
+  const labelSet = new Set(labels.map((label) => String(label).trim().toLowerCase()));
+  return (
+    /localhost:3001|\/labor\b|\/ecology\b|\/sessions\b|dashboard|menu|page|internal server error|route|navigation|sidebar/.test(value)
+    || ['ui', 'api', 'dashboard'].some((label) => labelSet.has(label))
+  );
+}
+
 function safeSlug(input: string): string {
   return input
     .toLowerCase()
@@ -94,6 +108,39 @@ function safeSlug(input: string): string {
 
 function normalizeName(input: string): string {
   return input.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function repoTail(relatedRepo: string | null | undefined): string {
+  return String(relatedRepo || '').trim().split('/').at(-1) || '';
+}
+
+function inferTargetBoardName(canonicalTask: CanonicalTask): string | null {
+  const normalizedProjectId = normalizeName(canonicalTask.project_id || '');
+  const normalizedRepoTail = normalizeName(repoTail(canonicalTask.related_repo));
+  const normalizedTitle = normalizeName(canonicalTask.title || '');
+
+  if (
+    normalizedProjectId === 'digital research'
+    || normalizedRepoTail === 'digital capitalism research'
+  ) {
+    return 'Digital Capitalism Research';
+  }
+
+  if (
+    normalizedProjectId === 'working notes'
+    || normalizedRepoTail === 'working notes'
+    || normalizedTitle.startsWith('working notes')
+  ) {
+    return 'WorkingNotes';
+  }
+
+  return null;
+}
+
+function resolveBoardByName(boards: BoardRow[], boardName: string | null): BoardRow | null {
+  if (!boardName) return null;
+  const normalizedBoardName = normalizeName(boardName);
+  return boards.find((board) => normalizeName(board.name) === normalizedBoardName) || null;
 }
 
 function parseLabels(raw: string): string[] {
@@ -274,8 +321,59 @@ function inferProject(boardName: string, projects: ProjectRegistryEntry[]): Proj
   );
 }
 
+function normalizeProjectForTask(
+  project: ProjectRegistryEntry,
+  title: string,
+  description: string | null,
+  labels: string[]
+): ProjectRegistryEntry {
+  const text = `${title}\n${description || ''}`;
+  if (
+    project.related_repo === 'MarcusGraetsch/rook-workspace'
+    && looksLikeDashboardTask(text, labels)
+  ) {
+    return {
+      project_id: project.project_id,
+      name: project.name,
+      related_repo: 'MarcusGraetsch/rook-dashboard',
+      type: project.type,
+    };
+  }
+
+  return project;
+}
+
 async function readCanonicalTask(projectId: string, taskId: string): Promise<CanonicalTask | null> {
-  return getCanonicalTask(taskId, projectId);
+  const scoped = await getCanonicalTask(taskId, projectId);
+  if (scoped) {
+    return scoped;
+  }
+
+  const taskRoots = [TASKS_DIR, ARCHIVE_TASKS_DIR];
+  const matches: string[] = [];
+
+  for (const root of taskRoots) {
+    try {
+      const projectDirs = await fs.readdir(root);
+      for (const candidateProjectId of projectDirs) {
+        const candidatePath = path.join(root, candidateProjectId, `${taskId}.json`);
+        try {
+          await fs.access(candidatePath);
+          matches.push(candidatePath);
+        } catch {
+          // Ignore missing candidates.
+        }
+      }
+    } catch {
+      // Ignore missing roots.
+    }
+  }
+
+  if (matches.length === 1) {
+    return getCanonicalTask(taskId);
+  }
+
+  return null;
 }
 
 async function nextTaskId(projectId: string): Promise<string> {
@@ -425,12 +523,19 @@ export async function syncKanbanTaskToCanonical(
   }
 
   const projects = await loadProjects();
-  const project = task.project_id
+  const rawProject = task.project_id
     ? projects.find((entry) => entry.project_id === task.project_id) || inferProject(task.board_name, projects)
     : inferProject(task.board_name, projects);
+  const labels = parseLabels(task.labels);
+  let project = normalizeProjectForTask(rawProject, task.title, task.description, labels);
   const canonicalTaskId = task.canonical_task_id || (await nextTaskId(project.project_id));
   const existing = await readCanonicalTask(project.project_id, canonicalTaskId);
-  const labels = parseLabels(task.labels);
+  if (existing?.project_id && existing.project_id !== project.project_id) {
+    project = {
+      ...project,
+      project_id: existing.project_id,
+    };
+  }
   const checklist = db.prepare(
     `
       SELECT title, completed, position
@@ -692,7 +797,8 @@ export async function restoreKanbanTaskToBacklog(
 
 export async function refreshKanbanTaskFromCanonical(
   db: Database.Database,
-  canonicalTask: CanonicalTask
+  canonicalTask: CanonicalTask,
+  boards: BoardRow[]
 ): Promise<void> {
   const current = db.prepare(
     `
@@ -720,10 +826,19 @@ export async function refreshKanbanTaskFromCanonical(
 
   const projectedStatus = projectedRuntimeStatus(canonicalTask) || canonicalTask.status;
   const targetColumnName = statusToColumnName(projectedStatus);
+  const targetBoard = resolveBoardByName(boards, inferTargetBoardName(canonicalTask));
+  const targetBoardId = targetBoard?.id || current.board_id;
   let nextColumnId = current.column_id;
   let nextColumnName = current.column_name;
+  let nextPosition = current.position;
 
-  if (targetColumnName && normalizeName(targetColumnName) !== normalizeName(current.column_name)) {
+  if (
+    targetColumnName
+    && (
+      normalizeName(targetColumnName) !== normalizeName(current.column_name)
+      || targetBoardId !== current.board_id
+    )
+  ) {
     const targetColumn = db.prepare(
       `
         SELECT id, name
@@ -733,7 +848,7 @@ export async function refreshKanbanTaskFromCanonical(
         ORDER BY position
         LIMIT 1
       `
-    ).get(current.board_id, targetColumnName) as { id: string; name: string } | undefined;
+    ).get(targetBoardId, targetColumnName) as { id: string; name: string } | undefined;
 
     if (targetColumn) {
       nextColumnId = targetColumn.id;
@@ -741,7 +856,13 @@ export async function refreshKanbanTaskFromCanonical(
     }
   } else if (!targetColumnName && canonicalTask.status === 'blocked') {
     const fallbackColumnName = blockedStageFallbackColumn(canonicalTask);
-    if (fallbackColumnName && normalizeName(fallbackColumnName) !== normalizeName(current.column_name)) {
+    if (
+      fallbackColumnName
+      && (
+        normalizeName(fallbackColumnName) !== normalizeName(current.column_name)
+        || targetBoardId !== current.board_id
+      )
+    ) {
       const fallbackColumn = db.prepare(
         `
           SELECT id, name
@@ -751,13 +872,20 @@ export async function refreshKanbanTaskFromCanonical(
           ORDER BY position
           LIMIT 1
         `
-      ).get(current.board_id, fallbackColumnName) as { id: string; name: string } | undefined;
+      ).get(targetBoardId, fallbackColumnName) as { id: string; name: string } | undefined;
 
       if (fallbackColumn) {
         nextColumnId = fallbackColumn.id;
         nextColumnName = fallbackColumn.name;
       }
     }
+  }
+
+  if (nextColumnId !== current.column_id) {
+    const maxPos = db.prepare(
+      'SELECT MAX(position) as max FROM tasks WHERE column_id = ? AND archived_at IS NULL AND id != ?'
+    ).get(nextColumnId, current.id) as { max: number | null };
+    nextPosition = (maxPos?.max ?? -1) + 1;
   }
 
   const githubIssue = canonicalTask.github_issue;
@@ -777,6 +905,7 @@ export async function refreshKanbanTaskFromCanonical(
         sync_status = ?,
         sync_error = ?,
         column_id = ?,
+        position = ?,
         updated_at = datetime('now')
       WHERE canonical_task_id = ?
     `
@@ -790,6 +919,7 @@ export async function refreshKanbanTaskFromCanonical(
     syncStatus,
     syncError,
     nextColumnId,
+    nextPosition,
     canonicalTask.task_id
   );
 
@@ -825,6 +955,7 @@ export async function refreshKanbanTaskFromCanonical(
 export async function reconcileKanbanProjectionFromCanonical(
   db: Database.Database
 ): Promise<Array<{ canonical_task_id: string; from: string; to: string }>> {
+  const boards = db.prepare('SELECT id, name FROM boards').all() as BoardRow[];
   const rows = db.prepare(
     `
       SELECT
@@ -854,7 +985,7 @@ export async function reconcileKanbanProjectionFromCanonical(
     }
 
     const before = canonicalTask.kanban?.column_name || '';
-    await refreshKanbanTaskFromCanonical(db, canonicalTask);
+    await refreshKanbanTaskFromCanonical(db, canonicalTask, boards);
     const refreshed = await readCanonicalTask(row.project_id, row.canonical_task_id);
     const after = refreshed?.kanban?.column_name || before;
 
