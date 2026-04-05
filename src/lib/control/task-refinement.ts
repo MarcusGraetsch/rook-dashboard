@@ -57,6 +57,15 @@ type Assignee =
   | 'health'
   | null;
 
+function looksLikeDashboardTask(text: string, labels: string[] = []): boolean {
+  const value = text.toLowerCase();
+  const labelSet = new Set(labels.map((label) => String(label).trim().toLowerCase()));
+  return (
+    /localhost:3001|\/labor\b|\/ecology\b|\/sessions\b|dashboard|menu|page|internal server error|route|navigation|sidebar/.test(value)
+    || ['ui', 'api', 'dashboard'].some((label) => labelSet.has(label))
+  );
+}
+
 function splitSentences(input: string): string[] {
   return input
     .split(/\n+|(?<=[.!?])\s+/)
@@ -586,6 +595,17 @@ export async function refineTaskDraft(input: TicketRefinementInput): Promise<Tic
     baseText,
     resolvedLabels
   );
+  const resolvedProjectId = agentResult?.project_id || input.project_id || inferredProject?.project_id || null;
+  const relatedRepoCandidate = agentResult?.related_repo || input.related_repo || inferredProject?.related_repo || null;
+  const resolvedRelatedRepo =
+    looksLikeDashboardTask(baseText, resolvedLabels)
+    && (!relatedRepoCandidate || relatedRepoCandidate === 'MarcusGraetsch/rook-workspace')
+      ? 'MarcusGraetsch/rook-dashboard'
+      : relatedRepoCandidate;
+  const normalizedProjectId =
+    resolvedRelatedRepo === 'MarcusGraetsch/rook-dashboard'
+      ? 'rook-workspace'
+      : resolvedProjectId;
 
   return {
     title: toTitle(agentResult?.title || refinedFallbackTitle || fallbackTitle),
@@ -602,8 +622,8 @@ export async function refineTaskDraft(input: TicketRefinementInput): Promise<Tic
             position: index,
           }))
         : fallbackChecklist,
-    project_id: agentResult?.project_id || input.project_id || inferredProject?.project_id || null,
-    related_repo: agentResult?.related_repo || input.related_repo || inferredProject?.related_repo || null,
+    project_id: normalizedProjectId,
+    related_repo: resolvedRelatedRepo,
     refinement_source: agentResult?.refinement_source || 'fallback',
     refinement_summary:
       agentResult?.refinement_summary ||

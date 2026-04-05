@@ -21,6 +21,7 @@ export default function RootLayout({
             <nav className="space-y-2">
               <a href="/" className="block px-4 py-2 rounded hover:bg-accent">Dashboard</a>
               <a href="/github" className="block px-4 py-2 rounded hover:bg-accent">GitHub</a>
+              <a href="/diagnostics" className="block px-4 py-2 rounded hover:bg-accent">Diagnostics</a>
               <a href="/archive" className="block px-4 py-2 rounded hover:bg-accent">Archive</a>
               <a href="/sessions" className="block px-4 py-2 rounded hover:bg-accent">Sessions</a>
               <a href="/agents" className="block px-4 py-2 rounded hover:bg-accent">Agents</a>

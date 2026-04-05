@@ -162,6 +162,44 @@ async function readTaskRuntimeState(projectId: string, taskId: string): Promise<
   }
 }
 
+function mergeSyncRecord<T extends Record<string, unknown> & { last_synced_at?: string | null }>(
+  canonicalValue: T | undefined,
+  runtimeValue: T | undefined
+): T | undefined {
+  if (!canonicalValue) {
+    return runtimeValue;
+  }
+  if (!runtimeValue) {
+    return canonicalValue;
+  }
+
+  const canonicalSyncedAt = Date.parse(canonicalValue.last_synced_at || '');
+  const runtimeSyncedAt = Date.parse(runtimeValue.last_synced_at || '');
+  const runtimeIsNewer = Number.isFinite(runtimeSyncedAt)
+    && (!Number.isFinite(canonicalSyncedAt) || runtimeSyncedAt >= canonicalSyncedAt);
+  const merged: Record<string, unknown> = {
+    ...canonicalValue,
+  };
+
+  for (const [key, value] of Object.entries(runtimeValue)) {
+    const hasRuntimeValue = value !== null && value !== undefined && value !== '';
+    const hasCanonicalValue = merged[key] !== null && merged[key] !== undefined && merged[key] !== '';
+
+    if (!hasRuntimeValue) {
+      if (!hasCanonicalValue) {
+        merged[key] = value;
+      }
+      continue;
+    }
+
+    if (!hasCanonicalValue || runtimeIsNewer) {
+      merged[key] = value;
+    }
+  }
+
+  return merged as T;
+}
+
 function applyRuntimeTaskState(
   baseTask: CanonicalTask,
   runtimeState: Partial<CanonicalTask> | null
@@ -182,8 +220,8 @@ function applyRuntimeTaskState(
       ...runtimeState.timestamps,
     };
   }
-  if (runtimeState.github_issue) merged.github_issue = runtimeState.github_issue;
-  if (runtimeState.github_pull_request) merged.github_pull_request = runtimeState.github_pull_request;
+  merged.github_issue = mergeSyncRecord(baseTask.github_issue, runtimeState.github_issue);
+  merged.github_pull_request = mergeSyncRecord(baseTask.github_pull_request, runtimeState.github_pull_request);
   return merged;
 }
 
@@ -282,6 +320,9 @@ export async function getCanonicalTasks(): Promise<CanonicalTask[]> {
 
 export async function getCanonicalTask(taskId: string, projectId?: string | null): Promise<CanonicalTask | null> {
   const candidates = await getTaskFileCandidates(taskId, projectId);
+  if (!projectId && candidates.length > 1) {
+    return null;
+  }
   for (const candidate of candidates) {
     const task = await readTaskFile(candidate);
     if (task) {

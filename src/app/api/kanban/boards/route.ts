@@ -142,6 +142,18 @@ export async function GET() {
               : canonical?.status && ['done', 'blocked'].includes(canonical.status)
                 ? canonical.status
                 : 'idle';
+            const blockedReason = canonical?.blocked_reason || null;
+            const failureReason = canonical?.failure_reason || null;
+            const isDoneLike = pipelineState === 'done' || canonical?.status === 'done' || col.name.toLowerCase() === 'done';
+            const prState = canonical?.github_pull_request?.state || null;
+            const prNumber = canonical?.github_pull_request?.number || null;
+            const cardWarning = failureReason || blockedReason
+              ? (failureReason || blockedReason)
+              : isDoneLike && prState !== 'merged'
+                ? prNumber
+                  ? `Done, but PR #${prNumber} is ${prState || 'missing state'}.`
+                  : 'Done, but PR metadata is missing.'
+                : null;
 
             return {
               id: task.id,
@@ -173,8 +185,8 @@ export async function GET() {
               canonical_status: canonical?.status || null,
               canonical_assigned_agent: canonical?.assigned_agent || null,
               commit_count: Array.isArray(canonical?.commits) ? canonical.commits.length : 0,
-              pr_state: canonical?.github_pull_request?.state || null,
-              pr_number: canonical?.github_pull_request?.number || null,
+              pr_state: prState,
+              pr_number: prNumber,
               test_status: normalizeTestStatus(canonical?.test_evidence?.status),
               test_commands: canonical?.test_evidence?.commands || [],
               test_summary: canonical?.test_evidence?.summary || null,
@@ -182,7 +194,9 @@ export async function GET() {
               review_summary: canonical?.review_evidence?.summary || null,
               has_handoff_notes: Boolean(task.handoff_notes || canonical?.handoff_notes),
               handoff_notes: task.handoff_notes || canonical?.handoff_notes || null,
-              failure_reason: canonical?.failure_reason || null,
+              blocked_reason: blockedReason,
+              failure_reason: failureReason,
+              card_warning: cardWarning,
               claimed_by: claimedBy,
               current_worker: currentWorker,
               pipeline_state: pipelineState,
