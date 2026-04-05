@@ -10,6 +10,16 @@
 - **Tokens** — Token-Nutzung und Kosten-Schätzung
 - **Cron** — Cron-Job Übersicht und Logs
 - **Memory** — Memory Browser für alle Agents
+- **Kanban** — Multi-board task control with manual board moves
+
+## Kanban Notes
+
+- Board selection is sticky in the browser and should not jump to another board during background refresh.
+- Tickets can be moved to another board in two ways:
+  - open the ticket and change the `Board` field in the modal
+  - drag a ticket onto another board tab in the Kanban header
+- A manual board move always lands the ticket in the target board's `Backlog` first.
+- `Send to Intake` remains an explicit action and still targets the chosen board's `Intake` workflow column.
 
 ## Quick Start
 

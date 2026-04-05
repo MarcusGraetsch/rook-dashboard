@@ -7,6 +7,7 @@ import {
   closestCorners,
   KeyboardSensor,
   PointerSensor,
+  useDroppable,
   useSensor,
   useSensors,
   DragStartEvent,
@@ -97,6 +98,54 @@ function statusToColumnName(status: string | null | undefined): string | null {
     default:
       return null
   }
+}
+
+function normalizeName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+function boardDropId(boardId: string): string {
+  return `board-tab:${boardId}`
+}
+
+function BoardTab({
+  board,
+  isActive,
+  onSelect,
+  onDelete,
+}: {
+  board: Board
+  isActive: boolean
+  onSelect: (boardId: string) => void
+  onDelete: (boardId: string) => void
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: boardDropId(board.id),
+  })
+
+  return (
+    <div key={board.id} ref={setNodeRef} className="flex items-center gap-1">
+      <button
+        onClick={() => onSelect(board.id)}
+        className={`px-3 py-1 rounded text-sm transition-colors ${
+          isActive
+            ? 'bg-highlight text-white'
+            : isOver
+              ? 'bg-emerald-700 text-white'
+              : 'bg-secondary hover:bg-accent'
+        }`}
+      >
+        {board.name}
+      </button>
+      <button
+        onClick={() => onDelete(board.id)}
+        className="px-2 py-1 text-xs text-red-400 hover:bg-red-900/50 rounded"
+        title="Board löschen"
+      >
+        ×
+      </button>
+    </div>
+  )
 }
 
 export function KanbanBoard() {
@@ -341,6 +390,35 @@ export function KanbanBoard() {
     return false
   }
 
+  async function moveTaskToBoard(taskId: string, targetBoardId: string, taskSnapshot?: Task) {
+    try {
+      const res = await fetch('/api/kanban/tasks', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: taskId,
+          target_board_id: targetBoardId,
+          intake_brief: taskSnapshot?.intake_brief ?? null,
+          handoff_notes: taskSnapshot?.handoff_notes ?? null,
+          checklist: Array.isArray(taskSnapshot?.checklist) ? taskSnapshot?.checklist : undefined,
+        }),
+      })
+
+      if (res.ok) {
+        fetchBoards()
+        return true
+      }
+
+      const json = await res.json().catch(() => null)
+      window.alert(json?.error || 'Failed to move task to board.')
+    } catch (e) {
+      console.error('Failed to move task to board:', e)
+    }
+
+    fetchBoards()
+    return false
+  }
+
   function updateBoardState(transform: (board: Board) => Board) {
     setBoards((currentBoards) => currentBoards.map(transform))
   }
@@ -403,6 +481,75 @@ export function KanbanBoard() {
     })
   }
 
+  function applyTaskMoveToBoardLocally(taskId: string, targetBoardId: string) {
+    const targetBoard = boards.find((board) => board.id === targetBoardId) || null
+    const targetBacklogColumn = targetBoard?.columns.find((column) => normalizeName(column.name) === 'backlog') || null
+
+    if (!targetBacklogColumn) {
+      return
+    }
+
+    updateBoardState((board) => {
+      const sourceColumn = board.columns.find((column) =>
+        column.tasks.some((task) => task.id === taskId)
+      )
+
+      if (!sourceColumn) {
+        return board
+      }
+
+      const movingTask = sourceColumn.tasks.find((task) => task.id === taskId)
+      if (!movingTask) {
+        return board
+      }
+
+      const sourceTasks = sourceColumn.tasks
+        .filter((task) => task.id !== taskId)
+        .map((task, index) => ({ ...task, position: index }))
+
+      if (board.id !== targetBoardId) {
+        if (board.id !== sourceColumn.board_id) {
+          return board
+        }
+
+        return {
+          ...board,
+          columns: board.columns.map((column) => (
+            column.id === sourceColumn.id
+              ? { ...column, tasks: sourceTasks }
+              : column
+          )),
+        }
+      }
+
+      return {
+        ...board,
+        columns: board.columns.map((column) => {
+          if (column.id !== targetBacklogColumn.id) {
+            return column
+          }
+
+          const nextTasks = [
+            ...column.tasks,
+            {
+              ...movingTask,
+              column_id: targetBacklogColumn.id,
+              column_name: targetBacklogColumn.name,
+              position: column.tasks.length,
+            },
+          ].map((task, index) => ({
+            ...task,
+            column_id: targetBacklogColumn.id,
+            column_name: targetBacklogColumn.name,
+            position: index,
+          }))
+
+          return { ...column, tasks: nextTasks }
+        }),
+      }
+    })
+  }
+
   function handleDragStart(event: DragStartEvent) {
     const { active } = event
     const task = findTask(active.id as string)
@@ -420,6 +567,21 @@ export function KanbanBoard() {
 
     const activeTask = findTask(activeId)
     if (!activeTask) return
+
+    if (overId.startsWith('board-tab:')) {
+      const targetBoardId = overId.replace(/^board-tab:/, '')
+      const sourceBoard = boards.find((board) =>
+        board.columns.some((column) => column.id === activeTask.column_id)
+      ) || null
+
+      if (!targetBoardId || sourceBoard?.id === targetBoardId) {
+        return
+      }
+
+      applyTaskMoveToBoardLocally(activeId, targetBoardId)
+      moveTaskToBoard(activeId, targetBoardId, activeTask)
+      return
+    }
 
     // Find over item (could be column or task)
     const overColumnId = findColumnId(overId)
@@ -491,87 +653,75 @@ export function KanbanBoard() {
   }
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="p-4 border-b border-gray-700 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Layout className="w-6 h-6 text-highlight" />
-          <h2 className="text-xl font-bold">Project Board</h2>
-        </div>
-        
-        {boards.length > 0 && (
-          <div className="flex items-center gap-2">
-            {boards.map(board => (
-              <div key={board.id} className="flex items-center gap-1">
-                <button
-                  onClick={() => {
-                    setActiveBoardId(board.id)
-                    writeStoredBoardId(board.id)
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="h-full flex flex-col">
+        {/* Header */}
+        <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Layout className="w-6 h-6 text-highlight" />
+            <h2 className="text-xl font-bold">Project Board</h2>
+          </div>
+          
+          {boards.length > 0 && (
+            <div className="flex items-center gap-2">
+              {boards.map((board) => (
+                <BoardTab
+                  key={board.id}
+                  board={board}
+                  isActive={activeBoard?.id === board.id}
+                  onSelect={(boardId) => {
+                    setActiveBoardId(boardId)
+                    writeStoredBoardId(boardId)
                   }}
-                  className={`px-3 py-1 rounded text-sm ${
-                    activeBoard?.id === board.id 
-                      ? 'bg-highlight text-white' 
-                      : 'bg-secondary hover:bg-accent'
-                  }`}
-                >
-                  {board.name}
-                </button>
-                <button
-                  onClick={() => deleteBoard(board.id)}
-                  className="px-2 py-1 text-xs text-red-400 hover:bg-red-900/50 rounded"
-                  title="Board löschen"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-        
-        {showNewBoard ? (
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={newBoardName}
-              onChange={(e) => setNewBoardName(e.target.value)}
-              placeholder="Board name..."
-              className="px-3 py-1 bg-secondary border border-gray-600 rounded text-sm text-white"
-              autoFocus
-              onKeyDown={(e) => e.key === 'Enter' && createBoard()}
-            />
+                  onDelete={deleteBoard}
+                />
+              ))}
+            </div>
+          )}
+          
+          {showNewBoard ? (
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newBoardName}
+                onChange={(e) => setNewBoardName(e.target.value)}
+                placeholder="Board name..."
+                className="px-3 py-1 bg-secondary border border-gray-600 rounded text-sm text-white"
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && createBoard()}
+              />
+              <button
+                onClick={createBoard}
+                className="px-3 py-1 bg-highlight text-white rounded text-sm"
+              >
+                Create
+              </button>
+              <button
+                onClick={() => setShowNewBoard(false)}
+                className="px-3 py-1 bg-gray-600 rounded text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
             <button
-              onClick={createBoard}
-              className="px-3 py-1 bg-highlight text-white rounded text-sm"
+              onClick={() => setShowNewBoard(true)}
+              className="flex items-center gap-2 px-3 py-1 bg-secondary hover:bg-accent rounded text-sm"
             >
-              Create
+              <Plus className="w-4 h-4" />
+              New Board
             </button>
-            <button
-              onClick={() => setShowNewBoard(false)}
-              className="px-3 py-1 bg-gray-600 rounded text-sm"
-            >
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => setShowNewBoard(true)}
-            className="flex items-center gap-2 px-3 py-1 bg-secondary hover:bg-accent rounded text-sm"
-          >
-            <Plus className="w-4 h-4" />
-            New Board
-          </button>
-        )}
-      </div>
+          )}
+        </div>
 
-      {/* Board */}
-      {activeBoard ? (
-        <div className="flex-1 overflow-x-auto p-4">
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCorners}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-          >
+        {/* Board */}
+        {activeBoard ? (
+          <div className="flex-1 overflow-x-auto p-4">
             <div className="flex gap-4 h-full">
               {activeBoard.columns
                 .sort((a, b) => a.position - b.position)
@@ -587,31 +737,31 @@ export function KanbanBoard() {
                   />
                 ))}
             </div>
-
-            <DragOverlay>
-              {activeTask ? (
-                <KanbanCard
-                  task={activeTask}
-                  isDragging
-                />
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-        </div>
-      ) : (
-        <div className="flex-1 flex items-center justify-center text-gray-400">
-          <div className="text-center">
-            <Layout className="w-16 h-16 mx-auto mb-4 opacity-50" />
-            <p className="mb-4">No boards yet. Create your first board to get started.</p>
-            <button
-              onClick={() => setShowNewBoard(true)}
-              className="px-4 py-2 bg-highlight text-white rounded"
-            >
-              Create Board
-            </button>
           </div>
-        </div>
-      )}
-    </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-gray-400">
+            <div className="text-center">
+              <Layout className="w-16 h-16 mx-auto mb-4 opacity-50" />
+              <p className="mb-4">No boards yet. Create your first board to get started.</p>
+              <button
+                onClick={() => setShowNewBoard(true)}
+                className="px-4 py-2 bg-highlight text-white rounded"
+              >
+                Create Board
+              </button>
+            </div>
+          </div>
+        )}
+
+        <DragOverlay>
+          {activeTask ? (
+            <KanbanCard
+              task={activeTask}
+              isDragging
+            />
+          ) : null}
+        </DragOverlay>
+      </div>
+    </DndContext>
   )
 }
