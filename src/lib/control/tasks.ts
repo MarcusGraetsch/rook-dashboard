@@ -56,6 +56,17 @@ export interface CanonicalTask {
     completed: boolean;
     position: number;
   }>;
+  plan?: {
+    approach: string;
+    scope: string[];
+    out_of_scope: string[];
+    steps: Array<{ id: string; title: string; owner: string; completed: boolean }>;
+    acceptance_criteria: Array<{ id: string; description: string; met: boolean | null }>;
+    risks: string[];
+    context: string;
+    planned_by: string;
+    planned_at: string;
+  };
   test_evidence?: {
     status?: 'passed' | 'failed' | null;
     commands?: string[];
@@ -159,6 +170,14 @@ async function readTaskRuntimeState(projectId: string, taskId: string): Promise<
     return JSON.parse(raw) as Partial<CanonicalTask>;
   } catch {
     return null;
+  }
+}
+
+export async function clearTaskRuntimeState(projectId: string, taskId: string): Promise<void> {
+  try {
+    await fs.unlink(path.join(TASK_STATE_DIR, projectId, `${taskId}.json`));
+  } catch {
+    // File may not exist — that's fine.
   }
 }
 

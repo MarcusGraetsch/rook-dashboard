@@ -27,6 +27,22 @@ export type TicketRefinementInput = {
   labels?: string[];
 };
 
+export type TaskPlan = {
+  approach: string;
+  scope: string[];
+  out_of_scope: string[];
+  steps: Array<{ id: string; title: string; owner: string; completed: boolean }>;
+  acceptance_criteria: Array<{ id: string; description: string; met: boolean | null }>;
+  risks: string[];
+  context: string;
+  planned_by: string;
+  planned_at: string;
+};
+
+export type TicketPlanResult = TicketRefinementResult & {
+  plan: TaskPlan;
+};
+
 export type TicketRefinementResult = {
   title: string;
   description: string;
@@ -628,5 +644,155 @@ export async function refineTaskDraft(input: TicketRefinementInput): Promise<Tic
     refinement_summary:
       agentResult?.refinement_summary ||
       `Structured from the rough brief with the local fallback refiner for ${workKind} work.`,
+  };
+}
+
+// ── Planning ──────────────────────────────────────────────────────────────────
+
+const REPO_LOCAL_PATHS: Record<string, string> = {
+  'MarcusGraetsch/rook-dashboard': '/root/.openclaw/workspace/engineering/rook-dashboard/src',
+  'MarcusGraetsch/rook-workspace': '/root/.openclaw/workspace',
+  'MarcusGraetsch/rook-agent': '/root/.openclaw/rook-agent',
+  'MarcusGraetsch/digital-capitalism-research': '/root/.openclaw/workspace/projects/digital-research',
+  'MarcusGraetsch/working-notes': '/root/.openclaw/workspace/projects/working-notes',
+};
+
+async function discoverCodebaseContext(relatedRepo: string | null): Promise<string> {
+  if (!relatedRepo) return '';
+  const localPath = REPO_LOCAL_PATHS[relatedRepo];
+  if (!localPath) return '';
+
+  try {
+    const entries = await fs.readdir(localPath, { withFileTypes: true });
+    const listing = entries
+      .map((e) => `${e.isDirectory() ? '[dir]' : '[file]'} ${e.name}`)
+      .join('\n');
+
+    // Read up to 3 small key files for pattern context (e.g. layout, config)
+    const candidates = entries
+      .filter((e) => !e.isDirectory() && /\.(ts|tsx|json|md)$/.test(e.name))
+      .slice(0, 3);
+
+    const snippets: string[] = [];
+    for (const entry of candidates) {
+      try {
+        const raw = await fs.readFile(path.join(localPath, entry.name), 'utf8');
+        snippets.push(`--- ${entry.name} ---\n${raw.slice(0, 600)}`);
+      } catch {
+        // skip unreadable files
+      }
+    }
+
+    return [
+      `Repo: ${relatedRepo}`,
+      `Local path: ${localPath}`,
+      `Directory listing:\n${listing}`,
+      snippets.length > 0 ? `File snippets:\n${snippets.join('\n\n')}` : '',
+    ].filter(Boolean).join('\n\n');
+  } catch {
+    return '';
+  }
+}
+
+async function planWithCoachAgent(
+  input: TicketRefinementInput,
+  refinement: TicketRefinementResult,
+  codebaseContext: string,
+): Promise<TaskPlan | null> {
+  const prompt = [
+    'You are a senior technical planner. Produce a structured implementation plan for the ticket below.',
+    'Return exactly one JSON object and nothing else.',
+    'JSON shape:',
+    '{"approach":"string","scope":["string"],"out_of_scope":["string"],"steps":[{"id":"1","title":"string","owner":"engineer","completed":false}],"acceptance_criteria":[{"id":"ac-1","description":"string","met":null}],"risks":["string"],"context":"string"}',
+    'Rules:',
+    '- approach: one sentence describing the chosen technical approach.',
+    '- scope: list of what is explicitly included in this ticket.',
+    '- out_of_scope: list of related things explicitly excluded.',
+    '- steps: ordered implementation steps, each with an owner (engineer/researcher/consultant/test/review).',
+    '- acceptance_criteria: specific, verifiable conditions. Each must be testable by a human or automated check.',
+    '- risks: identified technical or scope risks worth flagging.',
+    '- context: one paragraph of codebase facts relevant to execution (patterns, file locations, constraints).',
+    '- Be concrete. No generic placeholders.',
+    '',
+    `Ticket title: ${refinement.title}`,
+    `Description: ${refinement.description}`,
+    `Original brief: ${input.intake_brief || ''}`,
+    `Labels: ${refinement.labels.join(', ')}`,
+    `Assignee: ${refinement.assignee || 'engineer'}`,
+    codebaseContext ? `Codebase context:\n${codebaseContext}` : '',
+  ].filter(Boolean).join('\n');
+
+  try {
+    const { stdout } = await execFileAsync(
+      'openclaw',
+      ['agent', '--agent', 'coach', '--message', prompt, '--timeout', '60', '--json'],
+      {
+        cwd: '/root/.openclaw',
+        timeout: 65000,
+        maxBuffer: 2 * 1024 * 1024,
+      },
+    );
+
+    const assistantText = extractAssistantTextFromJson(stdout);
+    const jsonText = assistantText ? extractJsonObject(assistantText) : null;
+    if (!jsonText) return null;
+
+    const parsed = JSON.parse(jsonText) as Partial<TaskPlan>;
+    if (!parsed.approach) return null;
+
+    return {
+      approach: String(parsed.approach || ''),
+      scope: Array.isArray(parsed.scope) ? parsed.scope.map(String) : [],
+      out_of_scope: Array.isArray(parsed.out_of_scope) ? parsed.out_of_scope.map(String) : [],
+      steps: Array.isArray(parsed.steps)
+        ? parsed.steps.map((s, i) => ({
+            id: String(s.id || String(i + 1)),
+            title: String(s.title || ''),
+            owner: String(s.owner || 'engineer'),
+            completed: Boolean(s.completed),
+          }))
+        : [],
+      acceptance_criteria: Array.isArray(parsed.acceptance_criteria)
+        ? parsed.acceptance_criteria.map((ac, i) => ({
+            id: String(ac.id || `ac-${i + 1}`),
+            description: String(ac.description || ''),
+            met: ac.met ?? null,
+          }))
+        : [],
+      risks: Array.isArray(parsed.risks) ? parsed.risks.map(String) : [],
+      context: String(parsed.context || ''),
+      planned_by: 'agent:coach',
+      planned_at: new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function planAndRefineTaskDraft(input: TicketRefinementInput): Promise<TicketPlanResult> {
+  const refinement = await refineTaskDraft(input);
+  const codebaseContext = await discoverCodebaseContext(refinement.related_repo || input.related_repo || null);
+  const plan = await planWithCoachAgent(input, refinement, codebaseContext);
+
+  const fallbackPlan: TaskPlan = {
+    approach: `Implement ${refinement.title.toLowerCase()} following existing patterns in the codebase.`,
+    scope: refinement.checklist.map((item) => item.title),
+    out_of_scope: [],
+    steps: refinement.checklist.map((item, i) => ({
+      id: String(i + 1),
+      title: item.title,
+      owner: refinement.assignee || 'engineer',
+      completed: false,
+    })),
+    acceptance_criteria: [],
+    risks: [],
+    context: codebaseContext ? `Codebase discovered at ${refinement.related_repo}.` : '',
+    planned_by: 'fallback',
+    planned_at: new Date().toISOString(),
+  };
+
+  return {
+    ...refinement,
+    plan: plan || fallbackPlan,
   };
 }

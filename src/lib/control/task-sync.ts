@@ -1,7 +1,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import type Database from 'better-sqlite3';
-import { getCanonicalTask } from '@/lib/control/tasks';
+import { getCanonicalTask, clearTaskRuntimeState } from '@/lib/control/tasks';
 import type { CanonicalTask, TaskPriority, TaskStatus } from '@/lib/control/tasks';
 import { syncTaskToGithubIssue } from '@/lib/control/github-issues';
 
@@ -58,6 +58,7 @@ interface KanbanTaskContext {
   board_id: string;
   board_name: string;
   column_name: string;
+  plan: string | null;
 }
 
 interface KanbanChecklistItem {
@@ -595,6 +596,13 @@ export async function syncKanbanTaskToCanonical(
     failure_reason: leavingBlocked ? null : (existing?.failure_reason || null),
     source_channel: existing?.source_channel || null,
     artifacts: existing?.artifacts || [],
+    plan: (() => {
+      try {
+        return task.plan ? JSON.parse(task.plan) : (existing?.plan || undefined);
+      } catch {
+        return existing?.plan || undefined;
+      }
+    })(),
     checklist: checklist.map((entry) => ({
       title: entry.title,
       completed: Boolean(entry.completed),
@@ -625,6 +633,14 @@ export async function syncKanbanTaskToCanonical(
   };
 
   await writeCanonicalTask(canonicalTask);
+
+  // Clear stale runtime state when user explicitly moves the task out of a
+  // failed/blocked state (e.g. back to Ready). Without this, applyRuntimeTaskState
+  // would immediately re-apply the old `status: blocked` over the newly written
+  // canonical `status: ready`, causing the card to snap back to Blocked.
+  if (leavingBlocked) {
+    await clearTaskRuntimeState(canonicalTask.project_id, canonicalTask.task_id);
+  }
 
   const githubIssue = canonicalTask.github_issue;
   const syncStatus = githubIssue?.sync_status || 'synced';

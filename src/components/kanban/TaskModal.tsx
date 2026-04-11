@@ -17,6 +17,7 @@ interface Task {
   refinement_source?: string | null
   refinement_summary?: string | null
   refined_at?: string | null
+  plan?: string | null
   checklist?: Array<{ title: string; completed: boolean; position: number }>
   column_name?: string | null
   position: number
@@ -299,6 +300,8 @@ export function TaskModal({ task, isOpen, boards = [], currentBoardId = null, on
   const [refinementError, setRefinementError] = useState<string | null>(null)
   const [refinementSummary, setRefinementSummary] = useState<string | null>(null)
   const [refinementSource, setRefinementSource] = useState<string | null>(null)
+  const [draftPlan, setDraftPlan] = useState<Record<string, any> | null>(null)
+  const [planningLoading, setPlanningLoading] = useState(false)
   const [projects, setProjects] = useState<ProjectOption[]>([])
   const [gitContext, setGitContext] = useState<TaskGitContext | null>(null)
   const [gitContextLoading, setGitContextLoading] = useState(false)
@@ -320,6 +323,11 @@ export function TaskModal({ task, isOpen, boards = [], currentBoardId = null, on
       setDraftChecklist(Array.isArray(task.checklist) ? task.checklist : [])
       setRefinementSource(task.refinement_source || null)
       setRefinementSummary(task.refinement_summary || (task.refinement_source ? `Last refinement source: ${task.refinement_source}` : null))
+      try {
+        setDraftPlan(task.plan ? JSON.parse(task.plan) : null)
+      } catch {
+        setDraftPlan(null)
+      }
     } else {
       setTitle('')
       setDescription('')
@@ -335,9 +343,11 @@ export function TaskModal({ task, isOpen, boards = [], currentBoardId = null, on
       setDraftChecklist([])
       setRefinementSource(null)
       setRefinementSummary(null)
+      setDraftPlan(null)
     }
     setRefinementError(null)
     setRefinementLoading(false)
+    setPlanningLoading(false)
   }, [task?.id, isOpen, currentBoardId])
 
   useEffect(() => {
@@ -499,6 +509,60 @@ export function TaskModal({ task, isOpen, boards = [], currentBoardId = null, on
     }
   }
 
+  async function handlePlanAndRefine() {
+    const brief = intakeBrief.trim() || description.trim() || title.trim()
+    if (!brief) {
+      setRefinementError('Enter a rough brief first.')
+      return
+    }
+
+    setPlanningLoading(true)
+    setRefinementError(null)
+
+    try {
+      const res = await fetch('/api/control/tasks/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          description,
+          intake_brief: brief,
+          project_id: projectId || null,
+          related_repo: relatedRepo || selectedProject?.related_repo || task?.related_repo || null,
+          priority,
+          assignee: assignee || null,
+          labels: labels.split(',').map((l) => l.trim()).filter(Boolean),
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        throw new Error(json.error || 'Planning failed.')
+      }
+
+      const refinement = json.refinement
+      setTitle(refinement.title || title)
+      setDescription(refinement.description || description)
+      setIntakeBrief(refinement.intake_brief || brief)
+      setPriority(refinement.priority || priority)
+      setAssignee(refinement.assignee || '')
+      setLabels(Array.isArray(refinement.labels) ? refinement.labels.join(', ') : labels)
+      if (refinement.project_id) setProjectId(refinement.project_id)
+      if (refinement.related_repo) {
+        setRelatedRepo(refinement.related_repo)
+        const matchedProject = projects.find((p) => p.related_repo === refinement.related_repo)
+        if (matchedProject) setProjectId(matchedProject.project_id)
+      }
+      if (Array.isArray(refinement.checklist)) setDraftChecklist(refinement.checklist)
+      setRefinementSource(refinement.refinement_source || null)
+      setRefinementSummary(refinement.refinement_summary || 'Ticket refined.')
+      if (json.plan) setDraftPlan(json.plan)
+    } catch (error: any) {
+      setRefinementError(error?.message || 'Planning failed.')
+    } finally {
+      setPlanningLoading(false)
+    }
+  }
+
   function handleSave() {
     if (!title.trim()) return
     
@@ -520,6 +584,7 @@ export function TaskModal({ task, isOpen, boards = [], currentBoardId = null, on
       target_board_id: targetBoardId || null,
       handoff_notes: handoffNotes.trim() || null,
       checklist: draftChecklist,
+      plan: draftPlan ? JSON.stringify(draftPlan) : null,
     })
   }
 
@@ -544,6 +609,7 @@ export function TaskModal({ task, isOpen, boards = [], currentBoardId = null, on
       handoff_notes: handoffNotes.trim() || null,
       checklist: draftChecklist,
       target_status: 'intake',
+      plan: draftPlan ? JSON.stringify(draftPlan) : null,
     })
   }
 
@@ -591,14 +657,25 @@ export function TaskModal({ task, isOpen, boards = [], currentBoardId = null, on
                 <p className="text-sm font-medium text-blue-200">AI Ticket Intake</p>
                 <p className="text-xs text-blue-300/80">Paste rough notes here, then let the system turn them into a structured ticket before moving it to `ready`.</p>
               </div>
-              <button
-                type="button"
-                onClick={handleRefine}
-                disabled={refinementLoading}
-                className="px-3 py-2 rounded bg-blue-700 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {refinementLoading ? 'Refining...' : 'Refine Ticket'}
-              </button>
+              <div className="flex gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={handleRefine}
+                  disabled={refinementLoading || planningLoading}
+                  className="px-3 py-2 rounded bg-blue-700 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  {refinementLoading ? 'Refining...' : 'Quick Refine'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePlanAndRefine}
+                  disabled={refinementLoading || planningLoading}
+                  className="px-3 py-2 rounded bg-violet-700 text-white hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  title="Refine ticket and generate a full implementation plan with steps, acceptance criteria, and risks"
+                >
+                  {planningLoading ? 'Planning...' : 'Plan & Refine'}
+                </button>
+              </div>
             </div>
             <textarea
               value={intakeBrief}
@@ -615,6 +692,47 @@ export function TaskModal({ task, isOpen, boards = [], currentBoardId = null, on
                   </p>
                 )}
                 {refinementError && <p className="text-red-300">{refinementError}</p>}
+              </div>
+            )}
+            {draftPlan && (
+              <div className="rounded border border-violet-900/50 bg-violet-950/20 p-3 space-y-2 text-xs">
+                <p className="text-violet-200 font-medium">Implementation Plan</p>
+                {draftPlan.approach && (
+                  <p className="text-violet-100/80"><span className="text-violet-300">Approach:</span> {draftPlan.approach}</p>
+                )}
+                {Array.isArray(draftPlan.steps) && draftPlan.steps.length > 0 && (
+                  <div>
+                    <p className="text-violet-300 mb-1">Steps:</p>
+                    <ol className="space-y-0.5 list-none">
+                      {draftPlan.steps.map((s: any, i: number) => (
+                        <li key={s.id || i} className="text-violet-100/80">
+                          {s.completed ? '✓' : `${i + 1}.`} {s.title}
+                          <span className="text-violet-400/60"> ({s.owner})</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+                {Array.isArray(draftPlan.acceptance_criteria) && draftPlan.acceptance_criteria.length > 0 && (
+                  <div>
+                    <p className="text-violet-300 mb-1">Acceptance criteria:</p>
+                    <ul className="space-y-0.5 list-none">
+                      {draftPlan.acceptance_criteria.map((ac: any, i: number) => (
+                        <li key={ac.id || i} className="text-violet-100/80">– {ac.description}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {Array.isArray(draftPlan.risks) && draftPlan.risks.length > 0 && (
+                  <div>
+                    <p className="text-violet-300 mb-1">Risks:</p>
+                    <ul className="space-y-0.5 list-none">
+                      {draftPlan.risks.map((r: string, i: number) => (
+                        <li key={i} className="text-yellow-200/70">⚠ {r}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -88,6 +88,7 @@ function initSchema() {
   ensureColumn(database, 'tasks', 'sync_status', "TEXT DEFAULT 'local_only'");
   ensureColumn(database, 'tasks', 'sync_error', 'TEXT');
   ensureColumn(database, 'tasks', 'archived_at', 'TEXT');
+  ensureColumn(database, 'tasks', 'plan', 'TEXT');
 }
 
 function ensureColumn(

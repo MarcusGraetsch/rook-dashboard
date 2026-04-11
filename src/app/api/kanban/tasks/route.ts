@@ -359,6 +359,7 @@ export async function POST(request: NextRequest) {
       related_repo,
       checklist,
       target_status,
+      plan,
     } = await request.json();
     const id = generateId();
     
@@ -424,9 +425,13 @@ export async function POST(request: NextRequest) {
     
     const position = (maxPos?.max ?? -1) + 1;
     
+    const planJson = plan
+      ? (typeof plan === 'string' ? plan : JSON.stringify(plan))
+      : null;
+
     db.prepare(`
-      INSERT INTO tasks (id, column_id, title, description, intake_brief, refinement_source, refinement_summary, refined_at, position, priority, labels, assignee, due_date, handoff_notes, project_id, related_repo)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO tasks (id, column_id, title, description, intake_brief, refinement_source, refinement_summary, refined_at, position, priority, labels, assignee, due_date, handoff_notes, project_id, related_repo, plan)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       effectiveColumnId,
@@ -444,6 +449,7 @@ export async function POST(request: NextRequest) {
       handoff_notes || null,
       project_id || null,
       related_repo || null,
+      planJson,
     );
 
     if (effectiveChecklist.length > 0) {
@@ -511,8 +517,9 @@ export async function PUT(request: NextRequest) {
       related_repo,
       checklist,
       target_status,
+      plan,
     } = await request.json();
-    
+
     const db = getDb();
     const currentTask = db.prepare(`
       SELECT t.id, t.column_id, c.board_id, c.name as column_name
@@ -626,6 +633,10 @@ export async function PUT(request: NextRequest) {
     if (related_repo !== undefined) {
       updates.push('related_repo = ?');
       values.push(related_repo);
+    }
+    if (plan !== undefined) {
+      updates.push('plan = ?');
+      values.push(plan ? (typeof plan === 'string' ? plan : JSON.stringify(plan)) : null);
     }
     const effectiveAssignee =
       assignee !== undefined
