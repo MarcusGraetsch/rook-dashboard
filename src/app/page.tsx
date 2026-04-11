@@ -149,8 +149,8 @@ export default function Dashboard() {
     latestBackup?.includes_runtime_archive
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 lg:space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <h2 className="text-2xl font-bold">Dashboard</h2>
         
         {/* Date Range Picker */}
@@ -193,7 +193,7 @@ export default function Dashboard() {
       )}
       
       {/* KPI Cards - Real-Time */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         <KpiCard
           label="Sessions"
           value={sessions.length}
@@ -221,9 +221,9 @@ export default function Dashboard() {
       </div>
       
       {/* Main Content Grid */}
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
         {/* Agent Status */}
-        <div className="col-span-2 bg-secondary p-6 rounded-lg border border-gray-700">
+        <div className="lg:col-span-2 bg-secondary p-4 lg:p-6 rounded-lg border border-gray-700">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold flex items-center gap-2">
               <Zap className="w-5 h-5 text-highlight" />
@@ -236,7 +236,7 @@ export default function Dashboard() {
           {loading ? (
             <p className="text-gray-400">Laden...</p>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {agents.map((agent) => {
                 const agentSession = sessions.find(s => s.key.includes(`:${agent.id}:`));
                 const isActive = agentSession && (Date.now() - agentSession.updatedAt < 5 * 60 * 1000);
@@ -291,8 +291,8 @@ export default function Dashboard() {
       </div>
       
       {/* Gateway Info */}
-      <div className="grid grid-cols-4 gap-4">
-        <div className="col-span-2 bg-secondary p-4 rounded-lg border border-gray-700">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        <div className="lg:col-span-2 bg-secondary p-4 rounded-lg border border-gray-700">
           <h4 className="font-medium mb-2 flex items-center gap-2">
             <Terminal className="w-4 h-4 text-gray-400" />
             Gateway
