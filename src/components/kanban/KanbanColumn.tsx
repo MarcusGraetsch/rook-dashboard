@@ -93,7 +93,7 @@ export function KanbanColumn({ column, boards = [], onAddTask, onUpdateTask, onD
   return (
     <>
       <div
-        className={`flex-shrink-0 w-72 bg-secondary rounded-lg border ${
+        className={`flex-shrink-0 w-64 sm:w-72 bg-secondary rounded-lg border ${
           isOver ? 'border-highlight' : 'border-gray-700'
         }`}
       >
