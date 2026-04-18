@@ -22,10 +22,10 @@ const AGENT_WORKSPACES: Record<string, string> = {
   review: '/root/.openclaw/workspace-review',
   coach: '/root/.openclaw/workspace-coach',
   health: '/root/.openclaw/workspace-health',
-  consultant: '/root/.openclaw/workspace-consultant',
 };
 
-const AGENT_IDS = ['rook', 'engineer', 'researcher', 'test', 'review', 'coach', 'health', 'consultant'];
+// Matches openclaw.json agents.list — excludes `dispatcher` (one-shot systemd service, no persistent sessions)
+const AGENT_IDS = ['rook', 'engineer', 'researcher', 'test', 'review', 'coach', 'health'];
 
 export function getTrackedAgentIds() {
   return [...AGENT_IDS];
@@ -139,11 +139,28 @@ function deriveStatus(agentId: string, tasks: CanonicalTask[]) {
   const done = assigned.filter((task) => task.status === 'done');
   const currentTask =
     inProgress[0]?.task_id || testing[0]?.task_id || review[0]?.task_id || null;
-  const lastCompleted = done[0]?.task_id || null;
-  const lastError =
-    assigned.find((task) => task.failure_reason)?.failure_reason ||
-    assigned.find((task) => task.github_issue?.last_error)?.github_issue?.last_error ||
-    null;
+
+  // Most recently completed task
+  const lastCompleted =
+    done
+      .filter((t) => t.timestamps?.completed_at)
+      .sort((a, b) => new Date(b.timestamps!.completed_at!).getTime() - new Date(a.timestamps!.completed_at!).getTime())[0]
+      ?.task_id || done[0]?.task_id || null;
+
+  // Most recently updated blocked task; suppress if a successful completion happened more recently
+  const latestError = assigned
+    .filter((t) => t.status === 'blocked' && t.failure_reason && t.timestamps?.updated_at)
+    .sort((a, b) => new Date(b.timestamps!.updated_at!).getTime() - new Date(a.timestamps!.updated_at!).getTime())[0];
+  const latestDoneTime = done
+    .filter((t) => t.timestamps?.completed_at)
+    .reduce((max, t) => Math.max(max, new Date(t.timestamps!.completed_at!).getTime()), 0);
+  const latestErrorTime = latestError?.timestamps?.updated_at
+    ? new Date(latestError.timestamps.updated_at).getTime()
+    : 0;
+  const lastError: string | null =
+    latestError && latestErrorTime > latestDoneTime
+      ? (latestError.failure_reason ?? null)
+      : assigned.find((task) => task.github_issue?.last_error)?.github_issue?.last_error || null;
 
   let status: HealthSnapshot['status'] = 'idle';
   if (lastError) status = 'error';
