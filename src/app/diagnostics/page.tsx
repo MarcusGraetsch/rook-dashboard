@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 
+const AUTO_REFRESH_MS = 30_000
+
 interface DiagnosticFinding {
   task_id: string
   project_id: string
@@ -132,12 +134,18 @@ function reviewStatus(reviewAfter?: string) {
 export default function DiagnosticsPage() {
   const [data, setData] = useState<DiagnosticsPayload | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [nextRefreshAt, setNextRefreshAt] = useState<number | null>(null)
 
-  async function load() {
+  async function load(background = false) {
+    if (background) {
+      setRefreshing(true)
+    }
     try {
       const res = await fetch('/api/control/diagnostics')
       const json = await res.json()
       setData(json)
+      setNextRefreshAt(Date.now() + AUTO_REFRESH_MS)
     } catch (error: any) {
       setData({
         status: 'error',
@@ -145,11 +153,22 @@ export default function DiagnosticsPage() {
       })
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }
 
   useEffect(() => {
     load()
+  }, [])
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      load(true)
+    }, AUTO_REFRESH_MS)
+
+    setNextRefreshAt(Date.now() + AUTO_REFRESH_MS)
+
+    return () => window.clearInterval(intervalId)
   }, [])
 
   if (loading) {
@@ -175,6 +194,11 @@ export default function DiagnosticsPage() {
           </p>
           <p className="text-xs text-gray-500 mt-2">
             Last checked {formatTimestamp(data.checked_at)}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            {refreshing
+              ? 'Updating diagnostics...'
+              : `Next refresh ${formatTimestamp(nextRefreshAt ? new Date(nextRefreshAt).toISOString() : undefined)}`}
           </p>
         </div>
         <button
