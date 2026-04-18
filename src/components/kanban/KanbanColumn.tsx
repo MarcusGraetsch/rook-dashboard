@@ -55,9 +55,10 @@ interface Props {
   onUpdateTask: (taskId: string, updates: Partial<Task>) => void
   onDeleteTask: (taskId: string) => void
   onArchiveTask: (taskId: string) => void
+  onForceDoneTask?: (taskId: string, projectId: string, canonicalTaskId: string) => void
 }
 
-export function KanbanColumn({ column, onAddTask, onUpdateTask, onDeleteTask, onArchiveTask }: Props) {
+export function KanbanColumn({ column, onAddTask, onUpdateTask, onDeleteTask, onArchiveTask, onForceDoneTask }: Props) {
   const [isAdding, setIsAdding] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [showFullModal, setShowFullModal] = useState(false)
@@ -125,6 +126,7 @@ export function KanbanColumn({ column, onAddTask, onUpdateTask, onDeleteTask, on
                   onUpdate={onUpdateTask}
                   onDelete={onDeleteTask}
                   onArchive={onArchiveTask}
+                  onForceDone={onForceDoneTask}
                 />
               ))}
           </SortableContext>

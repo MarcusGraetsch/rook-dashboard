@@ -18,7 +18,7 @@ import {
 } from '@dnd-kit/sortable'
 import { KanbanColumn } from './KanbanColumn'
 import { KanbanCard } from './KanbanCard'
-import { Plus, Layout } from 'lucide-react'
+import { Plus, Layout, RefreshCw } from 'lucide-react'
 
 interface Task {
   id: string
@@ -50,6 +50,7 @@ interface Task {
   claimed_by?: string | null
   current_worker?: string | null
   pipeline_state?: 'running' | 'idle' | 'done' | 'blocked' | string | null
+  last_heartbeat?: string | null
 }
 
 interface Column {
@@ -105,6 +106,7 @@ export function KanbanBoard() {
   const [loading, setLoading] = useState(true)
   const [showNewBoard, setShowNewBoard] = useState(false)
   const [newBoardName, setNewBoardName] = useState('')
+  const [syncing, setSyncing] = useState(false)
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -166,6 +168,24 @@ export function KanbanBoard() {
       }
     } catch (e) {
       console.error('Failed to create board:', e)
+    }
+  }
+
+  async function handleSync() {
+    setSyncing(true)
+    try {
+      const res = await fetch('/api/kanban/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delete_done: false }),
+      })
+      if (res.ok) {
+        fetchBoards()
+      }
+    } catch (e) {
+      console.error('Failed to sync:', e)
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -268,6 +288,26 @@ export function KanbanBoard() {
       }
     } catch (e) {
       console.error('Failed to archive task:', e)
+    }
+  }
+
+  async function forceDoneTask(taskId: string, projectId: string, canonicalTaskId: string) {
+    try {
+      const res = await fetch('/api/control/tasks/force-done', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task_id: canonicalTaskId, project_id: projectId }),
+      })
+
+      if (res.ok) {
+        fetchBoards()
+      } else {
+        const json = await res.json().catch(() => null)
+        window.alert(json?.error || 'Failed to force task to done.')
+      }
+    } catch (e) {
+      console.error('Failed to force done task:', e)
+      window.alert('Network error while forcing task to done.')
     }
   }
 
@@ -522,13 +562,23 @@ export function KanbanBoard() {
             </button>
           </div>
         ) : (
-          <button
-            onClick={() => setShowNewBoard(true)}
-            className="flex items-center gap-2 px-3 py-1 bg-secondary hover:bg-accent rounded text-sm"
-          >
-            <Plus className="w-4 h-4" />
-            New Board
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="flex items-center gap-2 px-3 py-1 bg-secondary hover:bg-accent rounded text-sm disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Syncing...' : 'Sync'}
+            </button>
+            <button
+              onClick={() => setShowNewBoard(true)}
+              className="flex items-center gap-2 px-3 py-1 bg-secondary hover:bg-accent rounded text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              New Board
+            </button>
+          </div>
         )}
       </div>
 
@@ -552,6 +602,7 @@ export function KanbanBoard() {
                     onUpdateTask={(taskId, updates) => updateTask(taskId, updates)}
                     onDeleteTask={(taskId) => deleteTask(taskId)}
                     onArchiveTask={(taskId) => archiveTask(taskId)}
+                    onForceDoneTask={(taskId, projectId, canonicalTaskId) => forceDoneTask(taskId, projectId, canonicalTaskId)}
                   />
                 ))}
             </div>

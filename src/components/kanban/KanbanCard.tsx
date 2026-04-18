@@ -43,6 +43,7 @@ interface Task {
   claimed_by?: string | null
   current_worker?: string | null
   pipeline_state?: 'running' | 'idle' | 'done' | 'blocked' | string | null
+  last_heartbeat?: string | null
 }
 
 interface Props {
@@ -51,6 +52,7 @@ interface Props {
   onUpdate?: (taskId: string, updates: Partial<Task>) => void
   onDelete?: (taskId: string) => void
   onArchive?: (taskId: string) => void
+  onForceDone?: (taskId: string, projectId: string, canonicalTaskId: string) => void
 }
 
 const priorityColors = {
@@ -100,7 +102,7 @@ function normalizeReviewVerdict(verdict: string | null | undefined) {
   return null
 }
 
-export function KanbanCard({ task, isDragging, onUpdate, onDelete, onArchive }: Props) {
+export function KanbanCard({ task, isDragging, onUpdate, onDelete, onArchive, onForceDone }: Props) {
   const [showModal, setShowModal] = useState(false)
 
   const {
@@ -125,6 +127,18 @@ export function KanbanCard({ task, isDragging, onUpdate, onDelete, onArchive }: 
 
   function handleDelete() {
     onDelete?.(task.id)
+    setShowModal(false)
+  }
+
+  function handleForceDone() {
+    if (!task.canonical_task_id || !task.project_id) {
+      window.alert('Task must have a canonical task ID and project ID to force done.')
+      return
+    }
+    if (!confirm('⚠️ Force this task to Done? This will:\n- Set canonical status to done\n- Clear claimed_by\n- Delete runtime state\n\nUse only for stuck tasks.')) {
+      return
+    }
+    onForceDone?.(task.id, task.project_id!, task.canonical_task_id!)
     setShowModal(false)
   }
 
@@ -252,6 +266,19 @@ export function KanbanCard({ task, isDragging, onUpdate, onDelete, onArchive }: 
                   {runtimeBadge.text}
                 </span>
 
+                {/* Stuck-task indicator: running + no heartbeat for > 30min */}
+                {(() => {
+                  if (task.pipeline_state !== 'running' || !task.last_heartbeat) return null
+                  const heartbeatAge = Date.now() - new Date(task.last_heartbeat).getTime()
+                  const isStuck = heartbeatAge > 30 * 60 * 1000
+                  if (!isStuck) return null
+                  return (
+                    <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-amber-900/50 text-amber-300 animate-pulse">
+                      ⚠️ Stuck
+                    </span>
+                  )
+                })()}
+
                 {task.canonical_assigned_agent && (
                   <span className="text-xs bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded">
                     Stage owner: {ASSIGNEE_NAMES[task.canonical_assigned_agent] || task.canonical_assigned_agent}
@@ -357,6 +384,7 @@ export function KanbanCard({ task, isDragging, onUpdate, onDelete, onArchive }: 
           onArchive(task.id)
           setShowModal(false)
         } : undefined}
+        onForceDone={onForceDone ? handleForceDone : undefined}
       />
     </>
   )
