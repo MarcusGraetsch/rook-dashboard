@@ -6,6 +6,7 @@ import { getCanonicalTasks } from '@/lib/control/tasks'
 export const dynamic = 'force-dynamic'
 
 const RUNTIME_SMOKE_PATH = '/root/.openclaw/workspace/operations/health/runtime-smoke.json'
+const RUNTIME_CONTROL_PLANE_SCRIPT = '/root/.openclaw/workspace/operations/bin/check-runtime-control-plane.mjs'
 const ISOLATED_REPO_VIEWS = new Set(['rook-dashboard'])
 
 function repoTail(relatedRepo: string | null | undefined) {
@@ -107,8 +108,9 @@ function parseSystemctlShow(output: string) {
 
 export async function GET() {
   try {
-    const [contract, integrity, reconciliation, backupIntegrity, runtimeSmokeRaw, tasks, dashboardServiceRaw] = await Promise.all([
+    const [contract, controlPlane, integrity, reconciliation, backupIntegrity, runtimeSmokeRaw, tasks, dashboardServiceRaw] = await Promise.all([
       runNodeJson('/root/.openclaw/workspace/operations/bin/check-openclaw-contract.mjs'),
+      runNodeJson(RUNTIME_CONTROL_PLANE_SCRIPT),
       runNodeJson('/root/.openclaw/workspace/operations/bin/check-canonical-task-integrity.mjs'),
       runNodeJson('/root/.openclaw/workspace/operations/bin/reconcile-done-code-tasks.mjs'),
       runNodeJson('/root/.openclaw/workspace/operations/bin/check-runtime-backup-integrity.mjs'),
@@ -150,6 +152,7 @@ export async function GET() {
     return NextResponse.json({
       status: 'ok',
       contract,
+      control_plane: controlPlane,
       integrity,
       reconciliation,
       backup_integrity: backupIntegrity,
@@ -158,6 +161,9 @@ export async function GET() {
       tasks: taskDiagnostics,
       summary: {
         contract_ok: Boolean(contract?.ok),
+        control_plane_ok: Boolean(controlPlane?.ok),
+        control_plane_warnings: Number(controlPlane?.warning_count || 0),
+        control_plane_errors: Number(controlPlane?.error_count || 0),
         integrity_ok: Boolean(integrity?.ok),
         backup_integrity_ok: Boolean(backupIntegrity?.ok),
         runtime_smoke_ok: Boolean(runtimeSmoke?.ok),

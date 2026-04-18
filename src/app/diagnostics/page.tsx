@@ -17,6 +17,9 @@ interface DiagnosticsPayload {
   message?: string
   summary?: {
     contract_ok: boolean
+    control_plane_ok: boolean
+    control_plane_warnings: number
+    control_plane_errors: number
     integrity_ok: boolean
     backup_integrity_ok: boolean
     runtime_smoke_ok: boolean
@@ -26,6 +29,19 @@ interface DiagnosticsPayload {
   contract?: {
     ok: boolean
     checks: Array<{ name: string; ok: boolean; details: string }>
+  }
+  control_plane?: {
+    ok: boolean
+    warning_count: number
+    error_count: number
+    findings: Array<{
+      source: string
+      severity: 'info' | 'warning' | 'error'
+      type: string
+      details: string
+      acknowledgment_reason?: string
+      review_after?: string
+    }>
   }
   integrity?: {
     ok: boolean
@@ -71,6 +87,17 @@ interface DiagnosticsPayload {
 const badgeClass = (ok: boolean) =>
   ok ? 'bg-green-900/40 text-green-300' : 'bg-red-900/40 text-red-300'
 
+const findingBadgeClass = (severity: 'info' | 'warning' | 'error') => {
+  switch (severity) {
+    case 'info':
+      return 'bg-cyan-900/40 text-cyan-300'
+    case 'warning':
+      return 'bg-amber-900/40 text-amber-300'
+    default:
+      return 'bg-red-900/40 text-red-300'
+  }
+}
+
 export default function DiagnosticsPage() {
   const [data, setData] = useState<DiagnosticsPayload | null>(null)
   const [loading, setLoading] = useState(true)
@@ -113,7 +140,7 @@ export default function DiagnosticsPage() {
         <div>
           <h2 className="text-2xl font-bold">Diagnostics</h2>
           <p className="text-sm text-gray-400 mt-1">
-            Contract health, canonical integrity, runtime smoke state, and historical completion reconciliation.
+            Contract health, control-plane posture, canonical integrity, runtime smoke state, and historical completion reconciliation.
           </p>
         </div>
         <button
@@ -127,11 +154,20 @@ export default function DiagnosticsPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-6 gap-4">
+      <div className="grid grid-cols-7 gap-4">
         <div className="bg-secondary p-4 rounded-lg border border-gray-700">
           <p className="text-sm text-gray-400">Contract</p>
           <p className={`inline-block mt-2 px-2 py-1 rounded text-xs ${badgeClass(Boolean(data.summary?.contract_ok))}`}>
             {data.summary?.contract_ok ? 'ok' : 'error'}
+          </p>
+        </div>
+        <div className="bg-secondary p-4 rounded-lg border border-gray-700">
+          <p className="text-sm text-gray-400">Control Plane</p>
+          <p className={`inline-block mt-2 px-2 py-1 rounded text-xs ${badgeClass(Boolean(data.summary?.control_plane_ok))}`}>
+            {data.summary?.control_plane_ok ? 'ok' : 'error'}
+          </p>
+          <p className="text-xs text-gray-500 mt-2">
+            {data.summary?.control_plane_warnings || 0} warnings • {data.summary?.control_plane_errors || 0} errors
           </p>
         </div>
         <div className="bg-secondary p-4 rounded-lg border border-gray-700">
@@ -165,6 +201,47 @@ export default function DiagnosticsPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-6">
+        <div className="bg-secondary p-5 rounded-lg border border-gray-700 space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold">Control Plane</h3>
+              <p className="text-sm text-gray-400 mt-1">
+                Aggregated runtime posture, drift, stale state, and task-binding findings from the operator check.
+              </p>
+            </div>
+            <div className="text-right text-sm">
+              <p className="text-gray-400">Warnings</p>
+              <p className="text-xl font-semibold">{data.control_plane?.warning_count || 0}</p>
+            </div>
+          </div>
+          {(data.control_plane?.findings || []).length > 0 ? (
+            <div className="space-y-3">
+              {(data.control_plane?.findings || []).map((finding, index) => (
+                <div key={`${finding.type}:${index}`} className="rounded border border-gray-700 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs text-gray-400 font-mono">{finding.source}</p>
+                      <p className="text-sm font-semibold mt-1">{finding.type}</p>
+                    </div>
+                    <span className={`px-2 py-1 rounded text-xs ${findingBadgeClass(finding.severity)}`}>
+                      {finding.severity}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-200 mt-3">{finding.details}</p>
+                  {finding.acknowledgment_reason ? (
+                    <div className="mt-3 text-xs text-cyan-200/90 space-y-1">
+                      <p>{finding.acknowledgment_reason}</p>
+                      {finding.review_after ? <p>Review after {finding.review_after}</p> : null}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-green-300 text-sm">No control-plane findings reported.</p>
+          )}
+        </div>
+
         <div className="bg-secondary p-5 rounded-lg border border-gray-700 space-y-3">
           <h3 className="text-lg font-semibold">Dashboard Service</h3>
           <div className="text-sm space-y-2">
