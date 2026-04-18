@@ -159,8 +159,11 @@ async function readTaskFile(filePath: string): Promise<CanonicalTask | null> {
       return null;
     }
     return parsed;
-  } catch {
-    return null;
+  } catch (error) {
+    // Surface parse errors with context instead of silently returning null
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[tasks] Failed to parse task file ${filePath}: ${errorMessage}`);
+    throw new Error(`Failed to parse task file ${filePath}: ${errorMessage}`);
   }
 }
 
@@ -353,10 +356,47 @@ export async function getCanonicalTask(taskId: string, projectId?: string | null
 }
 
 export async function writeCanonicalTask(task: CanonicalTask): Promise<void> {
+  // Validate JSON serialization before writing to catch circular refs or malformed data
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(task, null, 2);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[tasks] JSON serialization failed for task ${task.task_id}: ${errorMessage}`);
+    throw new Error(`Failed to serialize task ${task.task_id} to JSON: ${errorMessage}`);
+  }
+
+  // Enforce terminal status fields when task is done
+  const normalizedStatus = task.status?.toLowerCase();
+  if (normalizedStatus === 'done' || normalizedStatus === 'completed') {
+    const nowIso = new Date().toISOString();
+    if (task.claimed_by !== null) {
+      console.warn(`[tasks] Auto-correcting claimed_by for completed task ${task.task_id}`);
+      task.claimed_by = null;
+    }
+    if (task.workflow_stage !== 'completed' && task.workflow_stage !== 'done') {
+      console.warn(`[tasks] Auto-correcting workflow_stage for completed task ${task.task_id}`);
+      task.workflow_stage = 'completed';
+    }
+    if (!task.timestamps?.completed_at) {
+      console.warn(`[tasks] Auto-setting completed_at for completed task ${task.task_id}`);
+      const timestamps = task.timestamps ?? { created_at: nowIso, updated_at: nowIso, started_at: null, completed_at: null };
+      timestamps.completed_at = timestamps.completed_at || nowIso;
+      (task as unknown as { timestamps: typeof timestamps }).timestamps = timestamps;
+    }
+    // Re-serialize after auto-corrections
+    try {
+      serialized = JSON.stringify(task, null, 2);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to re-serialize task ${task.task_id} after terminal field enforcement: ${errorMessage}`);
+    }
+  }
+
   const projectDir = path.join(TASKS_DIR, task.project_id);
   await fs.mkdir(projectDir, { recursive: true });
   const filePath = path.join(projectDir, `${task.task_id}.json`);
-  await fs.writeFile(filePath, `${JSON.stringify(task, null, 2)}\n`, 'utf8');
+  await fs.writeFile(filePath, `${serialized}\n`, 'utf8');
 }
 
 export async function getCanonicalTaskSummary() {

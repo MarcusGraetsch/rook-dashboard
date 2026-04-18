@@ -484,18 +484,22 @@ function nextTimestamps(
 }
 
 async function writeCanonicalTask(task: CanonicalTask) {
-  const projectDir = path.join(TASKS_DIR, task.project_id);
-  await ensureDir(projectDir);
-  const filePath = path.join(projectDir, `${task.task_id}.json`);
-  await fs.writeFile(filePath, `${JSON.stringify(task, null, 2)}\n`, 'utf8');
+  // Delegate to the properly validated writeCanonicalTask from tasks.ts
+  // This avoids duplicating validation logic and ensures consistency
+  const tasks = await import('@/lib/control/tasks');
+  return tasks.writeCanonicalTask(task);
 }
 
 async function readArchivedCanonicalTask(projectId: string, taskId: string): Promise<CanonicalTask | null> {
+  const filePath = path.join(ARCHIVE_TASKS_DIR, projectId, `${taskId}.json`);
   try {
-    const raw = await fs.readFile(path.join(ARCHIVE_TASKS_DIR, projectId, `${taskId}.json`), 'utf8');
+    const raw = await fs.readFile(filePath, 'utf8');
     return JSON.parse(raw) as CanonicalTask;
-  } catch {
-    return null;
+  } catch (error) {
+    // Surface parse errors with context instead of silently returning null
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[task-sync] Failed to parse archived task file ${filePath}: ${errorMessage}`);
+    throw new Error(`Failed to parse archived task file ${filePath}: ${errorMessage}`);
   }
 }
 
