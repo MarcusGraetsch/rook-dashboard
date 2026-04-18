@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic'
 const RUNTIME_SMOKE_PATH = '/root/.openclaw/workspace/operations/health/runtime-smoke.json'
 const RUNTIME_CONTROL_PLANE_SCRIPT = '/root/.openclaw/workspace/operations/bin/check-runtime-control-plane.mjs'
 const ISOLATED_REPO_VIEWS = new Set(['rook-dashboard'])
+const REVIEW_SOON_DAYS = 7
 
 function repoTail(relatedRepo: string | null | undefined) {
   return String(relatedRepo || '').split('/').pop() || ''
@@ -106,6 +107,31 @@ function parseSystemctlShow(output: string) {
   }
 }
 
+function summarizeReviewDue(findings: Array<{ review_after?: string }> | undefined) {
+  let review_due_soon = 0
+  let review_overdue = 0
+
+  for (const finding of findings || []) {
+    if (!finding.review_after) {
+      continue
+    }
+    const reviewDate = new Date(`${finding.review_after}T00:00:00Z`)
+    if (Number.isNaN(reviewDate.getTime())) {
+      continue
+    }
+
+    const msPerDay = 24 * 60 * 60 * 1000
+    const daysUntilReview = Math.ceil((reviewDate.getTime() - Date.now()) / msPerDay)
+    if (daysUntilReview < 0) {
+      review_overdue += 1
+    } else if (daysUntilReview <= REVIEW_SOON_DAYS) {
+      review_due_soon += 1
+    }
+  }
+
+  return { review_due_soon, review_overdue }
+}
+
 export async function GET() {
   try {
     const [contract, controlPlane, integrity, reconciliation, backupIntegrity, runtimeSmokeRaw, tasks, dashboardServiceRaw] = await Promise.all([
@@ -122,6 +148,7 @@ export async function GET() {
     ])
 
     const runtimeSmoke = JSON.parse(runtimeSmokeRaw || '{}')
+    const controlPlaneReviewSummary = summarizeReviewDue(controlPlane?.findings)
     const dashboardService = dashboardServiceRaw.startsWith('error=')
       ? {
           active_state: 'unknown',
@@ -165,6 +192,8 @@ export async function GET() {
         control_plane_ok: Boolean(controlPlane?.ok),
         control_plane_warnings: Number(controlPlane?.warning_count || 0),
         control_plane_errors: Number(controlPlane?.error_count || 0),
+        control_plane_review_due_soon: controlPlaneReviewSummary.review_due_soon,
+        control_plane_review_overdue: controlPlaneReviewSummary.review_overdue,
         integrity_ok: Boolean(integrity?.ok),
         backup_integrity_ok: Boolean(backupIntegrity?.ok),
         runtime_smoke_ok: Boolean(runtimeSmoke?.ok),

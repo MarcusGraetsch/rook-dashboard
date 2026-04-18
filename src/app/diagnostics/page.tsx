@@ -23,6 +23,8 @@ interface DiagnosticsPayload {
     control_plane_ok: boolean
     control_plane_warnings: number
     control_plane_errors: number
+    control_plane_review_due_soon: number
+    control_plane_review_overdue: number
     integrity_ok: boolean
     backup_integrity_ok: boolean
     runtime_smoke_ok: boolean
@@ -226,6 +228,9 @@ export default function DiagnosticsPage() {
           </p>
           <p className="text-xs text-gray-500 mt-2">
             {data.summary?.control_plane_warnings || 0} warnings • {data.summary?.control_plane_errors || 0} errors
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            {data.summary?.control_plane_review_due_soon || 0} due soon • {data.summary?.control_plane_review_overdue || 0} overdue
           </p>
         </div>
         <div className="bg-secondary p-4 rounded-lg border border-gray-700">
