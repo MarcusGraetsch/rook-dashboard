@@ -151,6 +151,7 @@ export async function GET() {
 
     return NextResponse.json({
       status: 'ok',
+      checked_at: new Date().toISOString(),
       contract,
       control_plane: controlPlane,
       integrity,

@@ -14,6 +14,7 @@ interface DiagnosticFinding {
 
 interface DiagnosticsPayload {
   status: 'ok' | 'error'
+  checked_at?: string
   message?: string
   summary?: {
     contract_ok: boolean
@@ -31,6 +32,7 @@ interface DiagnosticsPayload {
     checks: Array<{ name: string; ok: boolean; details: string }>
   }
   control_plane?: {
+    checked_at?: string
     ok: boolean
     warning_count: number
     error_count: number
@@ -98,6 +100,35 @@ const findingBadgeClass = (severity: 'info' | 'warning' | 'error') => {
   }
 }
 
+function formatTimestamp(value?: string) {
+  if (!value) return 'unknown'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
+}
+
+function reviewStatus(reviewAfter?: string) {
+  if (!reviewAfter) {
+    return null
+  }
+
+  const reviewDate = new Date(`${reviewAfter}T00:00:00Z`)
+  if (Number.isNaN(reviewDate.getTime())) {
+    return { label: `Review ${reviewAfter}`, className: 'bg-slate-800 text-slate-200' }
+  }
+
+  const msPerDay = 24 * 60 * 60 * 1000
+  const daysUntilReview = Math.ceil((reviewDate.getTime() - Date.now()) / msPerDay)
+
+  if (daysUntilReview < 0) {
+    return { label: `Review overdue ${reviewAfter}`, className: 'bg-red-900/40 text-red-300' }
+  }
+  if (daysUntilReview <= 7) {
+    return { label: `Review soon ${reviewAfter}`, className: 'bg-amber-900/40 text-amber-300' }
+  }
+  return { label: `Review ${reviewAfter}`, className: 'bg-cyan-900/40 text-cyan-300' }
+}
+
 export default function DiagnosticsPage() {
   const [data, setData] = useState<DiagnosticsPayload | null>(null)
   const [loading, setLoading] = useState(true)
@@ -141,6 +172,9 @@ export default function DiagnosticsPage() {
           <h2 className="text-2xl font-bold">Diagnostics</h2>
           <p className="text-sm text-gray-400 mt-1">
             Contract health, control-plane posture, canonical integrity, runtime smoke state, and historical completion reconciliation.
+          </p>
+          <p className="text-xs text-gray-500 mt-2">
+            Last checked {formatTimestamp(data.checked_at)}
           </p>
         </div>
         <button
@@ -208,6 +242,9 @@ export default function DiagnosticsPage() {
               <p className="text-sm text-gray-400 mt-1">
                 Aggregated runtime posture, drift, stale state, and task-binding findings from the operator check.
               </p>
+              <p className="text-xs text-gray-500 mt-2">
+                Checked {formatTimestamp(data.control_plane?.checked_at)}
+              </p>
             </div>
             <div className="text-right text-sm">
               <p className="text-gray-400">Warnings</p>
@@ -218,6 +255,16 @@ export default function DiagnosticsPage() {
             <div className="space-y-3">
               {(data.control_plane?.findings || []).map((finding, index) => (
                 <div key={`${finding.type}:${index}`} className="rounded border border-gray-700 p-4">
+                  {(() => {
+                    const status = reviewStatus(finding.review_after)
+                    return status ? (
+                      <div className="mb-3">
+                        <span className={`px-2 py-1 rounded text-xs ${status.className}`}>
+                          {status.label}
+                        </span>
+                      </div>
+                    ) : null
+                  })()}
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-xs text-gray-400 font-mono">{finding.source}</p>
@@ -231,7 +278,7 @@ export default function DiagnosticsPage() {
                   {finding.acknowledgment_reason ? (
                     <div className="mt-3 text-xs text-cyan-200/90 space-y-1">
                       <p>{finding.acknowledgment_reason}</p>
-                      {finding.review_after ? <p>Review after {finding.review_after}</p> : null}
+                      {finding.review_after ? <p>Policy review date {finding.review_after}</p> : null}
                     </div>
                   ) : null}
                 </div>
