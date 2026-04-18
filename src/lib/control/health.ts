@@ -177,12 +177,12 @@ function deriveStatus(agentId: string, tasks: CanonicalTask[]) {
   };
 }
 
-async function buildSnapshot(agentId: string): Promise<HealthSnapshot> {
+async function buildSnapshot(agentId: string, preloadedTasks?: CanonicalTask[]): Promise<HealthSnapshot> {
   const workspace = AGENT_WORKSPACES[agentId] || `/root/.openclaw/workspace-${agentId}`;
   const [runtime, runtimeSmoke, tasks] = await Promise.all([
     latestSessionUpdate(agentId),
     readRuntimeSmoke(),
-    getCanonicalTasks(),
+    preloadedTasks ? Promise.resolve(preloadedTasks) : getCanonicalTasks(),
   ]);
   const smokeEntry = runtimeSmoke?.results?.find((entry) => entry.agent_id === agentId) || null;
   const taskState = deriveStatus(agentId, tasks);
@@ -227,10 +227,12 @@ async function buildSnapshot(agentId: string): Promise<HealthSnapshot> {
 
 export async function writeHealthSnapshots(): Promise<HealthSnapshot[]> {
   await fs.mkdir(HEALTH_DIR, { recursive: true });
+  // Load tasks once and share across all agent snapshots to avoid N×M file reads.
+  const tasks = await getCanonicalTasks();
   const snapshots: HealthSnapshot[] = [];
 
   for (const agentId of AGENT_IDS) {
-    const snapshot = await buildSnapshot(agentId);
+    const snapshot = await buildSnapshot(agentId, tasks);
     snapshots.push(snapshot);
     await fs.writeFile(
       path.join(HEALTH_DIR, `${agentId}.json`),

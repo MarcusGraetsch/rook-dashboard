@@ -6,11 +6,7 @@ export const runtime = 'nodejs';
 
 export async function GET() {
   try {
-    let snapshots = await readHealthSnapshots();
-
-    if (snapshots.length === 0) {
-      snapshots = await writeHealthSnapshots();
-    }
+    const snapshots = await writeHealthSnapshots();
 
     return NextResponse.json({
       status: 'ok',

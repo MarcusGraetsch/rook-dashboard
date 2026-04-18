@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTrackedAgentIds, readHealthSnapshots, writeHealthSnapshots } from '@/lib/control/health';
+import { getTrackedAgentIds, writeHealthSnapshots } from '@/lib/control/health';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -9,10 +9,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const agentId = searchParams.get('agent');
 
-    let snapshots = await readHealthSnapshots();
-    if (snapshots.length === 0) {
-      snapshots = await writeHealthSnapshots();
-    }
+    const snapshots = await writeHealthSnapshots();
 
     if (agentId) {
       const snapshot = snapshots.find((item) => item.agent_id === agentId);
