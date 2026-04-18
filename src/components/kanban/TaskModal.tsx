@@ -1155,6 +1155,32 @@ export function TaskModal({ task, isOpen, boards = [], currentBoardId = null, on
                 Archive
               </button>
             )}
+            {task && task.canonical_task_id && (
+              <button
+                onClick={async () => {
+                  if (!confirm('Force this task to Done? This clears the runtime state and sets status=done.')) return
+                  try {
+                    const res = await fetch('/api/control/tasks/force-done', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ task_id: task.canonical_task_id, project_id: task.project_id }),
+                    })
+                    if (res.ok) {
+                      onClose()
+                      window.location.reload()
+                    } else {
+                      const json = await res.json().catch(() => ({}))
+                      window.alert(json.error || 'Force-done failed.')
+                    }
+                  } catch {
+                    window.alert('Force-done request failed.')
+                  }
+                }}
+                className="px-4 py-2 bg-orange-900/50 text-orange-300 hover:bg-orange-900/70 rounded mr-2"
+              >
+                Force Done
+              </button>
+            )}
             {task && onDelete && (
               <button
                 onClick={onDelete}

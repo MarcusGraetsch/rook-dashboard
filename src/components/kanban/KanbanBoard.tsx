@@ -709,13 +709,27 @@ export function KanbanBoard() {
               </button>
             </div>
           ) : (
-            <button
-              onClick={() => setShowNewBoard(true)}
-              className="flex items-center gap-2 px-3 py-1 bg-secondary hover:bg-accent rounded text-sm"
-            >
-              <Plus className="w-4 h-4" />
-              New Board
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  fetch('/api/kanban/sync', { method: 'POST' })
+                    .then(r => { if (r.ok) fetchBoards() })
+                    .catch(console.error)
+                }}
+                className="flex items-center gap-2 px-3 py-1 bg-secondary hover:bg-accent rounded text-sm"
+                title="Trigger manual reconcile from canonical files"
+              >
+                <Plus className="w-4 h-4" />
+                Sync
+              </button>
+              <button
+                onClick={() => setShowNewBoard(true)}
+                className="flex items-center gap-2 px-3 py-1 bg-secondary hover:bg-accent rounded text-sm"
+              >
+                <Plus className="w-4 h-4" />
+                New Board
+              </button>
+            </div>
           )}
         </div>
 

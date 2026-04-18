@@ -47,6 +47,7 @@ interface Task {
   claimed_by?: string | null
   current_worker?: string | null
   pipeline_state?: 'running' | 'idle' | 'done' | 'blocked' | string | null
+  last_heartbeat?: string | null
 }
 
 interface BoardOption {
@@ -278,6 +279,17 @@ export function KanbanCard({ task, boards = [], currentBoardId = null, isDraggin
                 <span className={`text-xs px-1.5 py-0.5 rounded ${runtimeBadge.className}`}>
                   {runtimeBadge.text}
                 </span>
+
+                {/* Stuck-task indicator: amber pulse when running > 30m without heartbeat update */}
+                {task.pipeline_state === 'running' && task.last_heartbeat && (() => {
+                  const ageMs = Date.now() - new Date(task.last_heartbeat).getTime();
+                  return ageMs > 30 * 60 * 1000;
+                })() && (
+                  <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-amber-900/50 text-amber-300" title={`Heartbeat ${task.last_heartbeat}`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                    Stuck
+                  </span>
+                )}
 
                 {task.canonical_assigned_agent && (
                   <span className="text-xs bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded">
