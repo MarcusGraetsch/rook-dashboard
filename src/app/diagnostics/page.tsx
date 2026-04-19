@@ -57,15 +57,22 @@ interface DiagnosticsPayload {
   }
   integrity?: {
     ok: boolean
+    status?: 'error'
+    message?: string
     duplicates: Array<{ task_id: string; files: string[] }>
     mismatches: Array<{ file: string; problem: string }>
   }
   reconciliation?: {
+    ok?: boolean
+    status?: 'error'
+    message?: string
     finding_count: number
     findings: DiagnosticFinding[]
   }
   backup_integrity?: {
     ok: boolean
+    status?: 'error'
+    message?: string
     latest_backup?: string | null
     checks?: Array<{ name: string; ok: boolean; details: string }>
     issues?: string[]
@@ -379,7 +386,15 @@ export default function DiagnosticsPage() {
 
         <div className="bg-secondary p-5 rounded-lg border border-gray-700 space-y-3 col-span-2">
           <h3 className="text-lg font-semibold">Integrity</h3>
-          {data.integrity?.ok ? (
+          {data.integrity?.status === 'error' ? (
+            <div className="rounded border border-red-900/50 bg-red-950/20 p-4 space-y-2">
+              <p className="text-red-300 text-sm font-medium">Integrity check failed to run.</p>
+              <p className="text-xs text-red-200 break-all">{data.integrity.message || 'Unknown integrity check error.'}</p>
+              <pre className="overflow-x-auto rounded bg-slate-950/80 p-3 text-xs text-red-200">
+                <code>node /root/.openclaw/workspace/operations/bin/check-canonical-task-integrity.mjs</code>
+              </pre>
+            </div>
+          ) : data.integrity?.ok ? (
             <p className="text-green-300 text-sm">No duplicate task ids or path mismatches detected.</p>
           ) : (
             <div className="space-y-2 text-sm">
@@ -404,7 +419,15 @@ export default function DiagnosticsPage() {
 
       <div className="bg-secondary p-5 rounded-lg border border-gray-700 space-y-4">
         <h3 className="text-lg font-semibold">Done Reconciliation</h3>
-        {data.reconciliation?.finding_count ? (
+        {data.reconciliation?.status === 'error' ? (
+          <div className="rounded border border-red-900/50 bg-red-950/20 p-4 space-y-2">
+            <p className="text-red-300 text-sm font-medium">Done reconciliation check failed to run.</p>
+            <p className="text-xs text-red-200 break-all">{data.reconciliation.message || 'Unknown reconciliation check error.'}</p>
+            <pre className="overflow-x-auto rounded bg-slate-950/80 p-3 text-xs text-red-200">
+              <code>node /root/.openclaw/workspace/operations/bin/reconcile-done-code-tasks.mjs</code>
+            </pre>
+          </div>
+        ) : data.reconciliation?.finding_count ? (
           <div className="space-y-3">
             {data.reconciliation.findings.map((finding) => (
               <div key={`${finding.project_id}:${finding.task_id}`} className="rounded border border-amber-900/50 bg-amber-950/20 p-4">
@@ -471,7 +494,15 @@ export default function DiagnosticsPage() {
 
       <div className="bg-secondary p-5 rounded-lg border border-gray-700 space-y-4">
         <h3 className="text-lg font-semibold">Backup Integrity</h3>
-        {data.backup_integrity?.ok ? (
+        {data.backup_integrity?.status === 'error' ? (
+          <div className="rounded border border-red-900/50 bg-red-950/20 p-4 space-y-2">
+            <p className="text-red-300 text-sm font-medium">Backup integrity check failed to run.</p>
+            <p className="text-xs text-red-200 break-all">{data.backup_integrity.message || 'Unknown backup integrity check error.'}</p>
+            <pre className="overflow-x-auto rounded bg-slate-950/80 p-3 text-xs text-red-200">
+              <code>node /root/.openclaw/workspace/operations/bin/check-runtime-backup-integrity.mjs</code>
+            </pre>
+          </div>
+        ) : data.backup_integrity?.ok ? (
           <p className="text-green-300 text-sm">
             Latest backup looks restorable. {data.backup_integrity.latest_backup || 'No backup path reported.'}
           </p>

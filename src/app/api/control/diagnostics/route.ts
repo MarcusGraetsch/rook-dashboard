@@ -27,6 +27,12 @@ interface FindingRemediation {
   automation_level: 'manual' | 'guided' | 'dry-run'
 }
 
+interface DiagnosticsCheckError {
+  ok: false
+  status: 'error'
+  message: string
+}
+
 function repoTail(relatedRepo: string | null | undefined) {
   return String(relatedRepo || '').split('/').pop() || ''
 }
@@ -67,7 +73,11 @@ function runNodeJson(scriptPath: string): Promise<any> {
     child.stderr.on('data', (chunk) => {
       stderr += String(chunk)
     })
-    child.on('close', () => {
+    child.on('close', (code) => {
+      if ((code ?? 1) !== 0) {
+        reject(new Error(stderr.trim() || `${scriptPath} exited with ${code}`))
+        return
+      }
       try {
         resolve(JSON.parse(stdout || '{}'))
       } catch (error: any) {
@@ -76,6 +86,18 @@ function runNodeJson(scriptPath: string): Promise<any> {
     })
     child.on('error', reject)
   })
+}
+
+async function runNodeJsonCheck(scriptPath: string): Promise<any | DiagnosticsCheckError> {
+  try {
+    return await runNodeJson(scriptPath)
+  } catch (error: any) {
+    return {
+      ok: false,
+      status: 'error',
+      message: error?.message || `Failed to run ${scriptPath}`,
+    }
+  }
 }
 
 function runText(command: string, args: string[]): Promise<string> {
@@ -201,11 +223,11 @@ function remediationForFinding(finding: ControlPlaneFinding): FindingRemediation
 export async function GET() {
   try {
     const [contract, controlPlane, integrity, reconciliation, backupIntegrity, runtimeSmokeRaw, tasks, dashboardServiceRaw] = await Promise.all([
-      runNodeJson('/root/.openclaw/workspace/operations/bin/check-openclaw-contract.mjs'),
-      runNodeJson(RUNTIME_CONTROL_PLANE_SCRIPT),
-      runNodeJson('/root/.openclaw/workspace/operations/bin/check-canonical-task-integrity.mjs'),
-      runNodeJson('/root/.openclaw/workspace/operations/bin/reconcile-done-code-tasks.mjs'),
-      runNodeJson('/root/.openclaw/workspace/operations/bin/check-runtime-backup-integrity.mjs'),
+      runNodeJsonCheck('/root/.openclaw/workspace/operations/bin/check-openclaw-contract.mjs'),
+      runNodeJsonCheck(RUNTIME_CONTROL_PLANE_SCRIPT),
+      runNodeJsonCheck('/root/.openclaw/workspace/operations/bin/check-canonical-task-integrity.mjs'),
+      runNodeJsonCheck('/root/.openclaw/workspace/operations/bin/reconcile-done-code-tasks.mjs'),
+      runNodeJsonCheck('/root/.openclaw/workspace/operations/bin/check-runtime-backup-integrity.mjs'),
       fs.readFile(RUNTIME_SMOKE_PATH, 'utf8').catch(() => '{}'),
       getCanonicalTasks(),
       runText('systemctl', ['--user', 'show', 'rook-dashboard.service', '--property=ActiveState,SubState,Result,ExecMainStatus']).catch(
