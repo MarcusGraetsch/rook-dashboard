@@ -41,6 +41,7 @@ export interface QueuedTask {
 export interface BlockedTask {
   task_id: string;
   title: string;
+  status: string;
   blocked_by: string[];
   failure_reason: string | null;
 }
@@ -192,6 +193,7 @@ function deriveStatus(agentId: string, tasks: CanonicalTask[]) {
   const blockedTasks: BlockedTask[] = blocked.map((t) => ({
     task_id: t.task_id,
     title: t.title || t.task_id,
+    status: t.status,
     blocked_by: Array.isArray(t.blocked_by) ? t.blocked_by : [],
     failure_reason: t.failure_reason || t.blocked_reason || null,
   }));
