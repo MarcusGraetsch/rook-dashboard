@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Bot, Folder, Shield, Clock } from 'lucide-react'
+import { Bot, Folder, Shield, Clock, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react'
 
 interface Agent {
   id: string
@@ -28,6 +28,20 @@ interface Session {
   tokens?: number
 }
 
+interface QueuedTask {
+  task_id: string
+  title: string
+  status: string
+  priority: string
+}
+
+interface BlockedTask {
+  task_id: string
+  title: string
+  blocked_by: string[]
+  failure_reason: string | null
+}
+
 interface HealthSnapshot {
   agent_id: string
   status: 'idle' | 'ready' | 'in_progress' | 'blocked' | 'error' | 'offline'
@@ -38,6 +52,8 @@ interface HealthSnapshot {
   last_error: string | null
   last_completed_task: string | null
   repo_heads: Record<string, string>
+  queued_tasks?: QueuedTask[]
+  blocked_tasks?: BlockedTask[]
   runtime: {
     session_count: number
     latest_session_update_at: string | null
@@ -66,9 +82,79 @@ const AGENT_EMOJIS: Record<string, string> = {
   health: '💪',
 }
 
+const PRIORITY_COLORS: Record<string, string> = {
+  urgent: 'text-red-400',
+  high: 'text-orange-400',
+  medium: 'text-yellow-400',
+  low: 'text-gray-400',
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  ready: 'ready',
+  in_progress: 'active',
+  testing: 'testing',
+  review: 'review',
+  blocked: 'blocked',
+}
+
+function QueuePanel({ snapshot }: { snapshot: HealthSnapshot | undefined }) {
+  const [open, setOpen] = useState(false)
+  const queued = snapshot?.queued_tasks || []
+  const blocked = snapshot?.blocked_tasks || []
+  if (queued.length === 0 && blocked.length === 0) return null
+  const MAX_SHOW = 5
+  return (
+    <div className="border-t border-gray-700 mt-3 pt-3">
+      <button
+        className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-200 w-full"
+        onClick={() => setOpen(!open)}
+      >
+        {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        Queue &amp; Blockers
+        <span className="ml-auto text-gray-500">
+          {queued.length > 0 && `${queued.length} queued`}
+          {queued.length > 0 && blocked.length > 0 && ' · '}
+          {blocked.length > 0 && <span className="text-orange-400">{blocked.length} blocked</span>}
+        </span>
+      </button>
+      {open && (
+        <div className="mt-2 space-y-1">
+          {queued.slice(0, MAX_SHOW).map((t) => (
+            <div key={t.task_id} className="flex items-center gap-2 text-xs">
+              <span className={`font-mono shrink-0 ${PRIORITY_COLORS[t.priority] || 'text-gray-400'}`}>{t.task_id}</span>
+              <span className="text-gray-300 truncate flex-1">{t.title}</span>
+              <span className="text-gray-500 shrink-0">{STATUS_LABELS[t.status] || t.status}</span>
+            </div>
+          ))}
+          {queued.length > MAX_SHOW && (
+            <a href="/kanban" className="text-xs text-blue-400 hover:underline block">
+              +{queued.length - MAX_SHOW} more →
+            </a>
+          )}
+          {blocked.length > 0 && (
+            <div className="mt-1 space-y-1">
+              {blocked.map((t) => (
+                <div key={t.task_id} className="flex items-start gap-2 text-xs">
+                  <AlertTriangle className="w-3 h-3 text-orange-400 mt-0.5 shrink-0" />
+                  <span className="font-mono text-orange-300 shrink-0">{t.task_id}</span>
+                  <span className="text-gray-300 truncate flex-1">{t.title}</span>
+                  {t.blocked_by.length > 0 && (
+                    <span className="text-gray-500 shrink-0 font-mono text-xs">{t.blocked_by[0]}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([])
   const [sessions, setSessions] = useState<Session[]>([])
+  const [healthSnapshots, setHealthSnapshots] = useState<Record<string, HealthSnapshot>>({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -85,6 +171,7 @@ export default function AgentsPage() {
           ;(healthJson.snapshots || []).forEach((snapshot: HealthSnapshot) => {
             healthByAgent[snapshot.agent_id] = snapshot
           })
+          setHealthSnapshots(healthByAgent)
           
           // Build agent list from all agents
           const allAgents = ['rook', 'consultant', 'coach', 'engineer', 'researcher', 'test', 'review', 'health']
@@ -244,6 +331,7 @@ export default function AgentsPage() {
                       )}
                     </div>
                   )}
+                  <QueuePanel snapshot={healthSnapshots[agent.id]} />
                 </div>
               </div>
             )

@@ -31,6 +31,20 @@ export function getTrackedAgentIds() {
   return [...AGENT_IDS];
 }
 
+export interface QueuedTask {
+  task_id: string;
+  title: string;
+  status: string;
+  priority: string;
+}
+
+export interface BlockedTask {
+  task_id: string;
+  title: string;
+  blocked_by: string[];
+  failure_reason: string | null;
+}
+
 export interface HealthSnapshot {
   agent_id: string;
   status: 'idle' | 'ready' | 'in_progress' | 'blocked' | 'error' | 'offline';
@@ -41,6 +55,8 @@ export interface HealthSnapshot {
   last_error: string | null;
   last_completed_task: string | null;
   repo_heads: Record<string, string>;
+  queued_tasks: QueuedTask[];
+  blocked_tasks: BlockedTask[];
   runtime: {
     session_count: number;
     latest_session_update_at: string | null;
@@ -168,12 +184,26 @@ function deriveStatus(agentId: string, tasks: CanonicalTask[]) {
   else if (inProgress.length > 0 || testing.length > 0 || review.length > 0) status = 'in_progress';
   else if (ready.length > 0) status = 'ready';
 
+  const activeStatuses = new Set(['ready', 'in_progress', 'testing', 'review']);
+  const queuedTasks: QueuedTask[] = assigned
+    .filter((t) => activeStatuses.has(t.status))
+    .map((t) => ({ task_id: t.task_id, title: t.title || t.task_id, status: t.status, priority: t.priority }));
+
+  const blockedTasks: BlockedTask[] = blocked.map((t) => ({
+    task_id: t.task_id,
+    title: t.title || t.task_id,
+    blocked_by: Array.isArray(t.blocked_by) ? t.blocked_by : [],
+    failure_reason: t.failure_reason || t.blocked_reason || null,
+  }));
+
   return {
     status,
     currentTask,
     queueDepth: ready.length + inProgress.length + blocked.length + testing.length + review.length,
     lastCompleted,
     lastError,
+    queuedTasks,
+    blockedTasks,
   };
 }
 
@@ -216,6 +246,8 @@ async function buildSnapshot(agentId: string, preloadedTasks?: CanonicalTask[]):
     last_error: derivedError,
     last_completed_task: taskState.lastCompleted,
     repo_heads: remote && head ? { [remote]: head } : {},
+    queued_tasks: taskState.queuedTasks,
+    blocked_tasks: taskState.blockedTasks,
     runtime: {
       session_count: runtime.count,
       latest_session_update_at: runtime.latest,
