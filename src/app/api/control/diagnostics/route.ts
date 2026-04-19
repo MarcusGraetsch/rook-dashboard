@@ -10,6 +10,23 @@ const RUNTIME_CONTROL_PLANE_SCRIPT = '/root/.openclaw/workspace/operations/bin/c
 const ISOLATED_REPO_VIEWS = new Set(['rook-dashboard'])
 const REVIEW_SOON_DAYS = 7
 
+interface ControlPlaneFinding {
+  source: string
+  severity: 'info' | 'warning' | 'error'
+  type: string
+  details: string
+  acknowledgment_reason?: string
+  review_after?: string
+  [key: string]: any
+}
+
+interface FindingRemediation {
+  summary: string
+  operator_action: string
+  command?: string
+  automation_level: 'manual' | 'guided' | 'dry-run'
+}
+
 function repoTail(relatedRepo: string | null | undefined) {
   return String(relatedRepo || '').split('/').pop() || ''
 }
@@ -132,6 +149,55 @@ function summarizeReviewDue(findings: Array<{ review_after?: string }> | undefin
   return { review_due_soon, review_overdue }
 }
 
+function remediationForFinding(finding: ControlPlaneFinding): FindingRemediation | null {
+  switch (finding.type) {
+    case 'unbound_agent_dirs':
+      return {
+        summary: 'Agent directories exist on disk that are no longer bound in openclaw.json.',
+        operator_action: 'Inspect the listed agent directories and dry-run stale-agent archival before any cleanup.',
+        command: `node /root/.openclaw/workspace/operations/bin/archive-stale-agent-dir.mjs --agent ${finding.agent_ids?.[0] || '<agent-id>'}`,
+        automation_level: 'dry-run',
+      }
+    case 'stale_agent_dir':
+      return {
+        summary: 'A stale agent directory still exists and has not met archive-readiness requirements.',
+        operator_action: 'Review the blockers first. If the agent is truly stale, run the archive helper in dry-run mode, then rerun with --apply only after the blockers are gone.',
+        command: `node /root/.openclaw/workspace/operations/bin/archive-stale-agent-dir.mjs --agent ${finding.agent_id || '<agent-id>'}`,
+        automation_level: 'dry-run',
+      }
+    case 'runtime_state_coverage_mismatch':
+      return {
+        summary: 'Canonical tasks and runtime overlay state are out of sync for this project.',
+        operator_action: 'Inspect which canonical tasks are missing runtime state and decide whether the task is intentionally idle, needs fresh dispatch, or needs stale runtime cleanup.',
+        command: 'node /root/.openclaw/workspace/operations/bin/check-runtime-state-coverage.mjs',
+        automation_level: 'guided',
+      }
+    case 'dispatcher_hook_model_not_provider_qualified':
+      return {
+        summary: 'The dispatcher hook model is set, but not with the provider-qualified contract expected by runtime checks.',
+        operator_action: 'Align the dispatcher model in openclaw.json and the installed user unit, then rerun the contract and control-plane checks.',
+        command: 'node /root/.openclaw/workspace/operations/bin/check-openclaw-contract.mjs',
+        automation_level: 'manual',
+      }
+    case 'telegram_group_allowlist_empty':
+      return {
+        summary: 'Telegram group ingress is disabled because allowlist mode has no groups configured.',
+        operator_action: 'If this is intentional, keep the policy acknowledgment current. If not, add the intended groups before enabling group ingress.',
+        command: 'node /root/.openclaw/workspace/operations/bin/check-runtime-posture.mjs',
+        automation_level: 'manual',
+      }
+    case 'gateway_insecure_auth_enabled':
+      return {
+        summary: 'The control UI currently allows insecure auth and depends on loopback binding plus token discipline.',
+        operator_action: 'Review whether loopback-only access is still guaranteed. If not, disable insecure auth and revalidate gateway access.',
+        command: 'node /root/.openclaw/workspace/operations/bin/check-runtime-posture.mjs',
+        automation_level: 'manual',
+      }
+    default:
+      return null
+  }
+}
+
 export async function GET() {
   try {
     const [contract, controlPlane, integrity, reconciliation, backupIntegrity, runtimeSmokeRaw, tasks, dashboardServiceRaw] = await Promise.all([
@@ -176,11 +242,23 @@ export async function GET() {
         updated_at: task.timestamps.updated_at,
       }))
 
+    const controlPlaneWithRemediation = controlPlane
+      ? {
+          ...controlPlane,
+          findings: Array.isArray(controlPlane.findings)
+            ? controlPlane.findings.map((finding: ControlPlaneFinding) => ({
+                ...finding,
+                remediation: remediationForFinding(finding),
+              }))
+            : [],
+        }
+      : controlPlane
+
     return NextResponse.json({
       status: 'ok',
       checked_at: new Date().toISOString(),
       contract,
-      control_plane: controlPlane,
+      control_plane: controlPlaneWithRemediation,
       integrity,
       reconciliation,
       backup_integrity: backupIntegrity,
@@ -189,9 +267,9 @@ export async function GET() {
       tasks: taskDiagnostics,
       summary: {
         contract_ok: Boolean(contract?.ok),
-        control_plane_ok: Boolean(controlPlane?.ok),
-        control_plane_warnings: Number(controlPlane?.warning_count || 0),
-        control_plane_errors: Number(controlPlane?.error_count || 0),
+        control_plane_ok: Boolean(controlPlaneWithRemediation?.ok),
+        control_plane_warnings: Number(controlPlaneWithRemediation?.warning_count || 0),
+        control_plane_errors: Number(controlPlaneWithRemediation?.error_count || 0),
         control_plane_review_due_soon: controlPlaneReviewSummary.review_due_soon,
         control_plane_review_overdue: controlPlaneReviewSummary.review_overdue,
         integrity_ok: Boolean(integrity?.ok),

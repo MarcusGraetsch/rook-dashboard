@@ -47,6 +47,12 @@ interface DiagnosticsPayload {
       details: string
       acknowledgment_reason?: string
       review_after?: string
+      remediation?: {
+        summary: string
+        operator_action: string
+        command?: string
+        automation_level: 'manual' | 'guided' | 'dry-run'
+      } | null
     }>
   }
   integrity?: {
@@ -304,6 +310,25 @@ export default function DiagnosticsPage() {
                     </span>
                   </div>
                   <p className="text-sm text-gray-200 mt-3">{finding.details}</p>
+                  {finding.remediation ? (
+                    <div className="mt-4 rounded border border-cyan-900/40 bg-cyan-950/10 p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">
+                          What to do
+                        </p>
+                        <span className="px-2 py-1 rounded text-xs bg-slate-800 text-slate-200">
+                          {finding.remediation.automation_level}
+                        </span>
+                      </div>
+                      <p className="text-sm text-cyan-100">{finding.remediation.summary}</p>
+                      <p className="text-xs text-cyan-200/90">{finding.remediation.operator_action}</p>
+                      {finding.remediation.command ? (
+                        <pre className="mt-2 overflow-x-auto rounded bg-slate-950/80 p-3 text-xs text-cyan-200">
+                          <code>{finding.remediation.command}</code>
+                        </pre>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {finding.acknowledgment_reason ? (
                     <div className="mt-3 text-xs text-cyan-200/90 space-y-1">
                       <p>{finding.acknowledgment_reason}</p>
