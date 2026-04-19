@@ -10,8 +10,13 @@ interface DiagnosticFinding {
   related_repo: string
   branch: string
   reason: string
+  classification?: string
   pr_state?: string | null
   pr_number?: number | null
+  remediation?: {
+    summary: string
+    operator_action: string
+  }
 }
 
 interface DiagnosticsPayload {
@@ -436,12 +441,24 @@ export default function DiagnosticsPage() {
                     <p className="text-xs text-amber-300 font-mono">{finding.project_id}</p>
                     <p className="text-sm font-semibold text-amber-200">{finding.task_id}</p>
                     <p className="text-xs text-gray-400 font-mono break-all mt-1">{finding.branch}</p>
+                    {finding.classification ? (
+                      <p className="text-xs text-gray-500 mt-2">{finding.classification}</p>
+                    ) : null}
                   </div>
                   <span className="text-xs px-2 py-1 rounded bg-amber-900/40 text-amber-300">
                     {finding.pr_state || 'no merged PR evidence'}
                   </span>
                 </div>
                 <p className="text-sm text-amber-100 mt-3">{finding.reason}</p>
+                {finding.remediation ? (
+                  <div className="mt-4 rounded border border-amber-800/40 bg-slate-950/30 p-3 space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-300">
+                      What to do
+                    </p>
+                    <p className="text-sm text-amber-100">{finding.remediation.summary}</p>
+                    <p className="text-xs text-amber-200/90">{finding.remediation.operator_action}</p>
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
