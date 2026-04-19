@@ -8,6 +8,8 @@ interface GhIssueView {
   number: number;
   url: string;
   state: 'open' | 'closed';
+  labels: string[];
+  assignees: string[];
 }
 
 export interface IssueSyncResult {
@@ -79,7 +81,7 @@ async function viewIssue(repo: string, number: number): Promise<GhIssueView> {
     'api',
     `repos/${repo}/issues/${number}`,
     '--jq',
-    '{number: .number, url: .html_url, state: .state}',
+    '{number: .number, url: .html_url, state: .state, labels: [.labels[].name], assignees: [.assignees[].login]}',
   ]);
 
   return JSON.parse(stdout) as GhIssueView;
@@ -142,8 +144,13 @@ async function updateIssue(task: CanonicalTask, number: number): Promise<GhIssue
 }
 
 function applySyncSuccess(task: CanonicalTask, issue: GhIssueView): CanonicalTask {
+  // Merge labels additively: keep canonical labels, add any new GitHub labels
+  const existingLabels = task.labels || [];
+  const mergedLabels = Array.from(new Set([...existingLabels, ...issue.labels]));
+
   return {
     ...task,
+    labels: mergedLabels,
     github_issue: {
       repo: task.related_repo,
       number: issue.number,
@@ -152,6 +159,7 @@ function applySyncSuccess(task: CanonicalTask, issue: GhIssueView): CanonicalTas
       sync_status: 'synced',
       last_synced_at: new Date().toISOString(),
       last_error: null,
+      assignees: issue.assignees.length > 0 ? issue.assignees : null,
     },
     timestamps: {
       ...task.timestamps,

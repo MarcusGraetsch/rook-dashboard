@@ -108,6 +108,7 @@ export interface CanonicalTask {
     sync_status: 'not_requested' | 'pending' | 'synced' | 'error';
     last_synced_at: string | null;
     last_error: string | null;
+    assignees?: string[] | null;
   };
   github_pull_request?: {
     repo: string;
