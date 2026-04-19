@@ -186,6 +186,7 @@ export async function GET() {
               claimed_by: claimedBy,
               current_worker: currentWorker,
               pipeline_state: pipelineState,
+              last_heartbeat: canonical?.last_heartbeat || null,
             };
           })
         }))

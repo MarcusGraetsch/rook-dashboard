@@ -118,6 +118,7 @@ interface Props {
   onSave: (task: Partial<Task>) => void
   onDelete?: () => void
   onArchive?: () => void
+  onForceDone?: () => void
 }
 
 interface ChecklistDraftItem {
@@ -270,7 +271,7 @@ function DatePicker({ value, onChange }: { value: string; onChange: (d: string) 
   )
 }
 
-export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }: Props) {
+export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive, onForceDone }: Props) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [intakeBrief, setIntakeBrief] = useState('')
@@ -976,6 +977,14 @@ export function TaskModal({ task, isOpen, onClose, onSave, onDelete, onArchive }
         {/* Footer */}
         <div className="p-4 border-t border-gray-700 flex items-center justify-between">
           <div>
+            {task && onForceDone && (
+              <button
+                onClick={onForceDone}
+                className="px-4 py-2 bg-orange-900/50 text-orange-300 hover:bg-orange-900/70 rounded mr-2"
+              >
+                ⚡ Force Done
+              </button>
+            )}
             {task && isDoneTask && onArchive && (
               <button
                 onClick={onArchive}
