@@ -171,6 +171,24 @@ function summarizeReviewDue(findings: Array<{ review_after?: string }> | undefin
   return { review_due_soon, review_overdue }
 }
 
+function summarizeReconciliation(findings: Array<{ classification?: string }> | undefined) {
+  const summary = {
+    open_or_unmerged_pr: 0,
+    commit_evidence_without_pr_metadata: 0,
+    done_without_merge_evidence: 0,
+    direct_to_main_without_merge_evidence: 0,
+  }
+
+  for (const finding of findings || []) {
+    const key = finding.classification
+    if (key && key in summary) {
+      summary[key as keyof typeof summary] += 1
+    }
+  }
+
+  return summary
+}
+
 function remediationForFinding(finding: ControlPlaneFinding): FindingRemediation | null {
   switch (finding.type) {
     case 'unbound_agent_dirs':
@@ -237,6 +255,7 @@ export async function GET() {
 
     const runtimeSmoke = JSON.parse(runtimeSmokeRaw || '{}')
     const controlPlaneReviewSummary = summarizeReviewDue(controlPlane?.findings)
+    const reconciliationSummary = summarizeReconciliation(reconciliation?.findings)
     const dashboardService = dashboardServiceRaw.startsWith('error=')
       ? {
           active_state: 'unknown',
@@ -299,6 +318,10 @@ export async function GET() {
         runtime_smoke_ok: Boolean(runtimeSmoke?.ok),
         dashboard_service_ok: dashboardService.active_state === 'active' && dashboardService.sub_state === 'running',
         reconciliation_findings: Number(reconciliation?.finding_count || 0),
+        reconciliation_open_pr: reconciliationSummary.open_or_unmerged_pr,
+        reconciliation_commit_only: reconciliationSummary.commit_evidence_without_pr_metadata,
+        reconciliation_no_evidence: reconciliationSummary.done_without_merge_evidence,
+        reconciliation_direct_main: reconciliationSummary.direct_to_main_without_merge_evidence,
       },
     })
   } catch (error: any) {

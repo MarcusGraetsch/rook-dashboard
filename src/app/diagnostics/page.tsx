@@ -35,6 +35,10 @@ interface DiagnosticsPayload {
     runtime_smoke_ok: boolean
     dashboard_service_ok: boolean
     reconciliation_findings: number
+    reconciliation_open_pr: number
+    reconciliation_commit_only: number
+    reconciliation_no_evidence: number
+    reconciliation_direct_main: number
   }
   contract?: {
     ok: boolean
@@ -424,6 +428,26 @@ export default function DiagnosticsPage() {
 
       <div className="bg-secondary p-5 rounded-lg border border-gray-700 space-y-4">
         <h3 className="text-lg font-semibold">Done Reconciliation</h3>
+        {data.reconciliation?.status !== 'error' ? (
+          <div className="grid grid-cols-4 gap-3 text-sm">
+            <div className="rounded border border-gray-700 p-3">
+              <p className="text-gray-500">Open PR</p>
+              <p className="text-lg font-semibold">{data.summary?.reconciliation_open_pr || 0}</p>
+            </div>
+            <div className="rounded border border-gray-700 p-3">
+              <p className="text-gray-500">Commit Only</p>
+              <p className="text-lg font-semibold">{data.summary?.reconciliation_commit_only || 0}</p>
+            </div>
+            <div className="rounded border border-gray-700 p-3">
+              <p className="text-gray-500">No Evidence</p>
+              <p className="text-lg font-semibold">{data.summary?.reconciliation_no_evidence || 0}</p>
+            </div>
+            <div className="rounded border border-gray-700 p-3">
+              <p className="text-gray-500">Direct Main</p>
+              <p className="text-lg font-semibold">{data.summary?.reconciliation_direct_main || 0}</p>
+            </div>
+          </div>
+        ) : null}
         {data.reconciliation?.status === 'error' ? (
           <div className="rounded border border-red-900/50 bg-red-950/20 p-4 space-y-2">
             <p className="text-red-300 text-sm font-medium">Done reconciliation check failed to run.</p>
