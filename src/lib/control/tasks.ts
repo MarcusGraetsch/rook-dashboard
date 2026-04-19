@@ -299,7 +299,14 @@ function priorityWeight(priority: TaskPriority): number {
   }
 }
 
-export async function getCanonicalTasks(): Promise<CanonicalTask[]> {
+let _taskCache: { tasks: CanonicalTask[]; expiresAt: number } | null = null;
+const CACHE_TTL_MS = 5000;
+
+export function invalidateTaskCache(): void {
+  _taskCache = null;
+}
+
+async function readAllCanonicalTasksFromDisk(): Promise<CanonicalTask[]> {
   const projects = await safeReadDir(TASKS_DIR);
   const tasks: CanonicalTask[] = [];
 
@@ -338,6 +345,15 @@ export async function getCanonicalTasks(): Promise<CanonicalTask[]> {
 
     return right.timestamps.updated_at.localeCompare(left.timestamps.updated_at);
   });
+}
+
+export async function getCanonicalTasks(): Promise<CanonicalTask[]> {
+  if (_taskCache && Date.now() < _taskCache.expiresAt) {
+    return _taskCache.tasks;
+  }
+  const tasks = await readAllCanonicalTasksFromDisk();
+  _taskCache = { tasks, expiresAt: Date.now() + CACHE_TTL_MS };
+  return tasks;
 }
 
 export async function getCanonicalTask(taskId: string, projectId?: string | null): Promise<CanonicalTask | null> {
@@ -397,6 +413,7 @@ export async function writeCanonicalTask(task: CanonicalTask): Promise<void> {
   await fs.mkdir(projectDir, { recursive: true });
   const filePath = path.join(projectDir, `${task.task_id}.json`);
   await fs.writeFile(filePath, `${serialized}\n`, 'utf8');
+  invalidateTaskCache();
 }
 
 export async function getCanonicalTaskSummary() {
