@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, Board, Column, Task } from '@/lib/db';
 import {
+  isWorkflowColumnName,
+  workflowColumnPosition,
+  WORKFLOW_COLUMNS,
+} from '@/lib/control/kanban-workflow';
+import {
   archiveKanbanTaskSync,
   autoSyncKanbanTaskToGithub,
   reconcileKanbanProjectionFromCanonical,
@@ -15,16 +20,11 @@ function generateId() {
   return randomUUID();
 }
 
-const DEFAULT_WORKFLOW_COLUMNS = [
-  { name: 'Backlog', color: '#52525b', position: 0 },
-  { name: 'Intake', color: '#1d4ed8', position: 1 },
-  { name: 'Ready', color: '#0f766e', position: 2 },
-  { name: 'In Progress', color: '#3b82f6', position: 3 },
-  { name: 'Testing', color: '#7c3aed', position: 4 },
-  { name: 'Review', color: '#c2410c', position: 5 },
-  { name: 'Blocked', color: '#b91c1c', position: 6 },
-  { name: 'Done', color: '#22c55e', position: 7 },
-];
+function getColumnRecord(db: ReturnType<typeof getDb>, id: string) {
+  return db.prepare('SELECT id, board_id, name, position, color FROM columns WHERE id = ?').get(id) as
+    | { id: string; board_id: string; name: string; position: number; color: string | null }
+    | undefined;
+}
 
 // GET /api/kanban/agent?board=xxx&compact=1
 // Returns board representation for agent context
@@ -121,9 +121,9 @@ export async function POST(request: NextRequest) {
       db.prepare('INSERT INTO boards (id, name, description) VALUES (?, ?, ?)').run(id, name.trim(), description || null);
       
       // Create default columns
-      for (const col of DEFAULT_WORKFLOW_COLUMNS) {
+      for (const col of WORKFLOW_COLUMNS) {
         db.prepare('INSERT INTO columns (id, board_id, name, position, color) VALUES (?, ?, ?, ?, ?)').run(
-          generateId(), id, col.name, col.position, col.color
+          generateId(), id, col.name, workflowColumnPosition(col.name), col.color
         );
       }
       
@@ -145,21 +145,49 @@ export async function POST(request: NextRequest) {
       if (!board_id || !name?.trim()) {
         return NextResponse.json({ error: 'board_id and name required' }, { status: 400 });
       }
-      
-      const maxPos = db.prepare('SELECT MAX(position) as max FROM columns WHERE board_id = ?').get(board_id) as { max: number | null };
+
+      if (!isWorkflowColumnName(name)) {
+        return NextResponse.json(
+          { error: 'Custom columns are not supported. Boards use the fixed canonical workflow.' },
+          { status: 400 }
+        );
+      }
+
+      const existing = db.prepare(
+        'SELECT id, board_id, name, position, color FROM columns WHERE board_id = ? AND lower(name) = lower(?) LIMIT 1'
+      ).get(board_id, String(name).trim()) as
+        | { id: string; board_id: string; name: string; position: number; color: string | null }
+        | undefined;
+
+      if (existing) {
+        return NextResponse.json({ ...existing, status: 'exists' });
+      }
+
       const id = generateId();
-      
+      const position = workflowColumnPosition(String(name).trim());
       db.prepare('INSERT INTO columns (id, board_id, name, position, color) VALUES (?, ?, ?, ?, ?)').run(
-        id, board_id, name.trim(), (maxPos?.max ?? -1) + 1, color || '#6b7280'
+        id, board_id, String(name).trim(), position, color || '#6b7280'
       );
-      
-      return NextResponse.json({ id, name: name.trim(), status: 'created' });
+
+      return NextResponse.json({ id, name: String(name).trim(), status: 'created' });
     }
     
     if (action === 'delete_column') {
       const { column_id } = body;
       if (!column_id) return NextResponse.json({ error: 'column_id required' }, { status: 400 });
-      
+
+      const existing = getColumnRecord(db, column_id);
+      if (!existing) {
+        return NextResponse.json({ error: 'column not found' }, { status: 404 });
+      }
+
+      if (isWorkflowColumnName(existing.name)) {
+        return NextResponse.json(
+          { error: 'Canonical workflow columns cannot be deleted.' },
+          { status: 400 }
+        );
+      }
+
       db.prepare('DELETE FROM columns WHERE id = ?').run(column_id);
       return NextResponse.json({ status: 'deleted' });
     }

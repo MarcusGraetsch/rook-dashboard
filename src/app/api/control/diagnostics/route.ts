@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { spawn } from 'child_process'
 import { promises as fs } from 'fs'
+import { getDb } from '@/lib/db'
+import { collectKanbanIntegrityFindings } from '@/lib/control/kanban-integrity'
 import { getCanonicalTasks } from '@/lib/control/tasks'
 
 export const dynamic = 'force-dynamic'
@@ -233,6 +235,41 @@ function remediationForFinding(finding: ControlPlaneFinding): FindingRemediation
         command: 'node /root/.openclaw/workspace/operations/bin/check-runtime-posture.mjs',
         automation_level: 'manual',
       }
+    case 'kanban_nonworkflow_column':
+      return {
+        summary: 'A dashboard board contains a column outside the canonical workflow schema.',
+        operator_action: 'Inspect the board columns, move any tasks out of the legacy column, then remove or reconcile the drifted column.',
+        command: 'curl -sS http://127.0.0.1:3001/api/control/diagnostics',
+        automation_level: 'guided',
+      }
+    case 'kanban_missing_workflow_column':
+      return {
+        summary: 'A dashboard board is missing one of the required workflow columns.',
+        operator_action: 'Reload the board through the dashboard APIs or recreate the missing workflow column using the guarded API path.',
+        command: 'curl -sS http://127.0.0.1:3001/api/control/diagnostics',
+        automation_level: 'guided',
+      }
+    case 'kanban_duplicate_workflow_column':
+      return {
+        summary: 'A dashboard board contains duplicate workflow columns and may project tasks ambiguously.',
+        operator_action: 'Merge tasks into the intended column and remove the duplicate manually from the SQLite data only after confirming task placement.',
+        command: 'curl -sS http://127.0.0.1:3001/api/control/diagnostics',
+        automation_level: 'manual',
+      }
+    case 'kanban_task_missing_canonical_link':
+      return {
+        summary: 'A live dashboard task has no canonical task linkage metadata.',
+        operator_action: 'Resync the task from Kanban to canonical state, then verify that canonical_task_id and project_id are populated.',
+        command: 'curl -sS http://127.0.0.1:3001/api/kanban/sync',
+        automation_level: 'guided',
+      }
+    case 'kanban_task_missing_canonical_record':
+      return {
+        summary: 'A live dashboard task points to a canonical task file that no longer exists.',
+        operator_action: 'Compare the dashboard row with operations/tasks and either restore the canonical task or recreate the task from Kanban deliberately.',
+        command: 'curl -sS http://127.0.0.1:3001/api/control/diagnostics',
+        automation_level: 'manual',
+      }
     default:
       return null
   }
@@ -240,7 +277,7 @@ function remediationForFinding(finding: ControlPlaneFinding): FindingRemediation
 
 export async function GET() {
   try {
-    const [contract, controlPlane, integrity, reconciliation, backupIntegrity, runtimeSmokeRaw, tasks, dashboardServiceRaw] = await Promise.all([
+    const [contract, controlPlane, integrity, reconciliation, backupIntegrity, runtimeSmokeRaw, tasks, dashboardServiceRaw, kanbanIntegrity] = await Promise.all([
       runNodeJsonCheck('/root/.openclaw/workspace/operations/bin/check-openclaw-contract.mjs'),
       runNodeJsonCheck(RUNTIME_CONTROL_PLANE_SCRIPT),
       runNodeJsonCheck('/root/.openclaw/workspace/operations/bin/check-canonical-task-integrity.mjs'),
@@ -251,6 +288,7 @@ export async function GET() {
       runText('systemctl', ['--user', 'show', 'rook-dashboard.service', '--property=ActiveState,SubState,Result,ExecMainStatus']).catch(
         (error: any) => `error=${error?.message || 'unknown'}`
       ),
+      collectKanbanIntegrityFindings(getDb()),
     ])
 
     const runtimeSmoke = JSON.parse(runtimeSmokeRaw || '{}')
@@ -295,6 +333,18 @@ export async function GET() {
         }
       : controlPlane
 
+    const kanbanIntegrityWithRemediation = kanbanIntegrity
+      ? {
+          ...kanbanIntegrity,
+          findings: Array.isArray(kanbanIntegrity.findings)
+            ? (kanbanIntegrity.findings as ControlPlaneFinding[]).map((finding) => ({
+                ...finding,
+                remediation: remediationForFinding(finding),
+              }))
+            : [],
+        }
+      : kanbanIntegrity
+
     return NextResponse.json({
       status: 'ok',
       checked_at: new Date().toISOString(),
@@ -305,6 +355,7 @@ export async function GET() {
       backup_integrity: backupIntegrity,
       runtime_smoke: runtimeSmoke,
       dashboard_service: dashboardService,
+      kanban_integrity: kanbanIntegrityWithRemediation,
       tasks: taskDiagnostics,
       summary: {
         contract_ok: Boolean(contract?.ok),
@@ -317,6 +368,8 @@ export async function GET() {
         backup_integrity_ok: Boolean(backupIntegrity?.ok),
         runtime_smoke_ok: Boolean(runtimeSmoke?.ok),
         dashboard_service_ok: dashboardService.active_state === 'active' && dashboardService.sub_state === 'running',
+        kanban_integrity_ok: Boolean(kanbanIntegrityWithRemediation?.ok),
+        kanban_integrity_warnings: Number(kanbanIntegrityWithRemediation?.warning_count || 0),
         reconciliation_findings: Number(reconciliation?.finding_count || 0),
         reconciliation_open_pr: reconciliationSummary.open_or_unmerged_pr,
         reconciliation_commit_only: reconciliationSummary.commit_evidence_without_pr_metadata,
