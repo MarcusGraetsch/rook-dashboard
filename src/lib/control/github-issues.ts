@@ -67,6 +67,11 @@ async function runGh(args: string[]) {
   return execFileAsync('gh', args, { maxBuffer: 1024 * 1024 });
 }
 
+function isNotFound(error: unknown): boolean {
+  const msg = String((error as any)?.stderr || (error as any)?.stdout || (error as any)?.message || '');
+  return msg.includes('404') || /not found/i.test(msg);
+}
+
 async function ensureGhAuth() {
   try {
     await runGh(['auth', 'status']);
@@ -103,20 +108,31 @@ async function createIssue(task: CanonicalTask): Promise<GhIssueView> {
 }
 
 async function updateIssue(task: CanonicalTask, number: number): Promise<GhIssueView> {
-  await runGh([
-    'api',
-    `repos/${task.related_repo}/issues/${number}`,
-    '--method',
-    'PATCH',
-    '-f',
-    `title=${buildIssueTitle(task)}`,
-    '-f',
-    `body=${buildIssueBody(task)}`,
-  ]);
-
+  // View first — determines what updates are safe and needed.
   const current = await viewIssue(task.related_repo, number);
+  const taskDone = task.status === 'done';
 
-  if (task.status === 'done' && current.state !== 'closed') {
+  // Consistent state: done task with closed issue — nothing to do.
+  if (taskDone && current.state === 'closed') {
+    return current;
+  }
+
+  // Update title/body only for open issues — PATCH on a closed issue returns 422.
+  if (current.state === 'open') {
+    await runGh([
+      'api',
+      `repos/${task.related_repo}/issues/${number}`,
+      '--method',
+      'PATCH',
+      '-f',
+      `title=${buildIssueTitle(task)}`,
+      '-f',
+      `body=${buildIssueBody(task)}`,
+    ]);
+  }
+
+  // Close when task is done and issue is still open.
+  if (taskDone) {
     await runGh([
       'api',
       `repos/${task.related_repo}/issues/${number}`,
@@ -128,18 +144,12 @@ async function updateIssue(task: CanonicalTask, number: number): Promise<GhIssue
     return viewIssue(task.related_repo, number);
   }
 
-  if (task.status !== 'done' && current.state === 'closed') {
-    await runGh([
-      'api',
-      `repos/${task.related_repo}/issues/${number}`,
-      '--method',
-      'PATCH',
-      '-f',
-      'state=open',
-    ]);
+  // For open issues: re-fetch so returned data reflects the PATCH above.
+  if (current.state === 'open') {
     return viewIssue(task.related_repo, number);
   }
 
+  // Closed issue, task not done: content skipped, state left as-is (respect manual GitHub state).
   return current;
 }
 
@@ -214,8 +224,40 @@ export async function syncTaskToGithubIssue(taskId: string, projectId?: string |
         ? `Synced GitHub issue #${updated.github_issue.number}.`
         : 'Synced GitHub issue.',
     };
-  } catch (error: any) {
-    const message = error?.message || 'GitHub issue sync failed.';
+  } catch (error: unknown) {
+    // Issue was deleted or made inaccessible on GitHub: clear the reference so the next sync
+    // creates a fresh issue rather than surfacing a permanent 404 error.
+    if (isNotFound(error) && task.github_issue?.number) {
+      const clearedNumber = task.github_issue.number;
+      const cleared: CanonicalTask = {
+        ...task,
+        github_issue: {
+          repo: task.related_repo,
+          number: null,
+          url: null,
+          state: null,
+          sync_status: 'not_requested',
+          last_synced_at: task.github_issue.last_synced_at || null,
+          last_error: null,
+        },
+        timestamps: {
+          ...task.timestamps,
+          updated_at: new Date().toISOString(),
+        },
+      };
+      await writeCanonicalTask(cleared);
+      return {
+        task_id: task.task_id,
+        repo: task.related_repo,
+        number: null,
+        url: null,
+        state: null,
+        sync_status: 'synced',
+        message: `GitHub issue #${clearedNumber} not found (deleted or inaccessible). Reference cleared — next sync will create a fresh issue.`,
+      };
+    }
+
+    const message = (error as any)?.stderr?.trim() || (error as any)?.stdout?.trim() || (error as any)?.message || 'GitHub issue sync failed.';
     const updated = applySyncError(task, message);
     await writeCanonicalTask(updated);
 
