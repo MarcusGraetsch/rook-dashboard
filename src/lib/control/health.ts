@@ -174,10 +174,14 @@ function deriveStatus(agentId: string, tasks: CanonicalTask[]) {
   const latestErrorTime = latestError?.timestamps?.updated_at
     ? new Date(latestError.timestamps.updated_at).getTime()
     : 0;
+  // Only surface github sync errors from active tasks; backlog/done errors are stale and irrelevant.
+  const INACTIVE_STATUSES = new Set(['backlog', 'done', 'completed', 'archived', 'cancelled']);
   const lastError: string | null =
     latestError && latestErrorTime > latestDoneTime
       ? (latestError.failure_reason ?? null)
-      : assigned.find((task) => task.github_issue?.last_error)?.github_issue?.last_error || null;
+      : assigned
+          .filter((task) => !INACTIVE_STATUSES.has(task.status))
+          .find((task) => task.github_issue?.last_error)?.github_issue?.last_error || null;
 
   let status: HealthSnapshot['status'] = 'idle';
   if (lastError) status = 'error';
