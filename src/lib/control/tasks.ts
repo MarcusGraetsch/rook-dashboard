@@ -215,7 +215,10 @@ function mergeSyncRecord<T extends Record<string, unknown> & { last_synced_at?: 
       continue;
     }
 
-    if (!hasCanonicalValue || runtimeIsNewer) {
+    // Canonical null with runtime non-null and no newer timestamp = deliberate clear.
+    // Only let runtime win when it is genuinely newer (has a more recent last_synced_at).
+    const canonicalIsExplicitNull = key in (canonicalValue as object) && merged[key] === null;
+    if ((!hasCanonicalValue && !canonicalIsExplicitNull) || runtimeIsNewer) {
       merged[key] = value;
     }
   }
