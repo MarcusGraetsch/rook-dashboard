@@ -1,26 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, Board, Column, Task } from '@/lib/db';
 import { reconcileKanbanProjectionFromCanonical } from '@/lib/control/task-sync';
+import { normalizeKanbanName, WORKFLOW_COLUMNS } from '@/lib/control/kanban-workflow';
 import { getCanonicalTask } from '@/lib/control/tasks';
 import { randomUUID } from 'crypto';
 
 function generateId() {
   return randomUUID();
-}
-
-const WORKFLOW_COLUMNS = [
-  { name: 'Backlog', color: '#52525b' },
-  { name: 'Intake', color: '#1d4ed8' },
-  { name: 'Ready', color: '#0f766e' },
-  { name: 'In Progress', color: '#3b82f6' },
-  { name: 'Testing', color: '#7c3aed' },
-  { name: 'Review', color: '#c2410c' },
-  { name: 'Blocked', color: '#b91c1c' },
-  { name: 'Done', color: '#22c55e' },
-];
-
-function normalizeName(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
 function normalizeTestStatus(status: string | null | undefined) {
@@ -49,14 +35,14 @@ function ensureWorkflowColumns(db: ReturnType<typeof getDb>, boardId: string) {
     .prepare('SELECT id, name, position FROM columns WHERE board_id = ? ORDER BY position')
     .all(boardId) as Array<{ id: string; name: string; position: number }>;
 
-  const existingNames = new Set(existing.map((column) => normalizeName(column.name)));
+  const existingNames = new Set(existing.map((column) => normalizeKanbanName(column.name)));
   const insertColumn = db.prepare(
     'INSERT INTO columns (id, board_id, name, position, color) VALUES (?, ?, ?, ?, ?)'
   );
 
   let nextPosition = existing.length;
   for (const column of WORKFLOW_COLUMNS) {
-    if (existingNames.has(normalizeName(column.name))) {
+    if (existingNames.has(normalizeKanbanName(column.name))) {
       continue;
     }
     insertColumn.run(generateId(), boardId, column.name, nextPosition, column.color);
