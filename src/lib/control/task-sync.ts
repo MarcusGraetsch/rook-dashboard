@@ -1,6 +1,10 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import type Database from 'better-sqlite3';
+import {
+  inferTargetBoardNameFromProject,
+  resolveBoardProject,
+} from '@/lib/control/board-project-routing';
 import { getCanonicalTask, clearTaskRuntimeState } from '@/lib/control/tasks';
 import type { CanonicalTask, TaskPriority, TaskStatus } from '@/lib/control/tasks';
 import { syncTaskToGithubIssue } from '@/lib/control/github-issues';
@@ -116,26 +120,11 @@ function repoTail(relatedRepo: string | null | undefined): string {
 }
 
 function inferTargetBoardName(canonicalTask: CanonicalTask): string | null {
-  const normalizedProjectId = normalizeName(canonicalTask.project_id || '');
-  const normalizedRepoTail = normalizeName(repoTail(canonicalTask.related_repo));
-  const normalizedTitle = normalizeName(canonicalTask.title || '');
-
-  if (
-    normalizedProjectId === 'digital research'
-    || normalizedRepoTail === 'digital capitalism research'
-  ) {
-    return 'Digital Capitalism Research';
-  }
-
-  if (
-    normalizedProjectId === 'working notes'
-    || normalizedRepoTail === 'working notes'
-    || normalizedTitle.startsWith('working notes')
-  ) {
-    return 'WorkingNotes';
-  }
-
-  return null;
+  return inferTargetBoardNameFromProject(
+    canonicalTask.project_id,
+    canonicalTask.related_repo,
+    canonicalTask.title
+  );
 }
 
 function resolveBoardByName(boards: BoardRow[], boardName: string | null): BoardRow | null {
@@ -290,36 +279,6 @@ async function loadProjects(): Promise<ProjectRegistryEntry[]> {
   } catch {
     return [];
   }
-}
-
-function inferProject(boardName: string, projects: ProjectRegistryEntry[]): ProjectRegistryEntry {
-  const normalizedBoard = normalizeName(boardName);
-
-  const exact = projects.find((project) => {
-    const repoTail = project.related_repo.split('/').at(-1) || '';
-    return [project.project_id, project.name, repoTail].some(
-      (candidate) => normalizeName(candidate) === normalizedBoard
-    );
-  });
-  if (exact) return exact;
-
-  const contains = projects.find((project) => {
-    const repoTail = project.related_repo.split('/').at(-1) || '';
-    return [project.project_id, project.name, repoTail].some((candidate) => {
-      const normalizedCandidate = normalizeName(candidate);
-      return normalizedBoard.includes(normalizedCandidate) || normalizedCandidate.includes(normalizedBoard);
-    });
-  });
-  if (contains) return contains;
-
-  return (
-    projects.find((project) => project.project_id === 'rook-workspace') || {
-      project_id: 'rook-workspace',
-      name: 'Rook Workspace',
-      related_repo: 'MarcusGraetsch/rook-workspace',
-      type: 'operations',
-    }
-  );
 }
 
 function normalizeProjectForTask(
@@ -528,9 +487,7 @@ export async function syncKanbanTaskToCanonical(
   }
 
   const projects = await loadProjects();
-  const rawProject = task.project_id
-    ? projects.find((entry) => entry.project_id === task.project_id) || inferProject(task.board_name, projects)
-    : inferProject(task.board_name, projects);
+  const rawProject = resolveBoardProject(task.board_name, projects, task.project_id);
   const labels = parseLabels(task.labels);
   let project = normalizeProjectForTask(rawProject, task.title, task.description, labels);
   const canonicalTaskId = task.canonical_task_id || (await nextTaskId(project.project_id));
