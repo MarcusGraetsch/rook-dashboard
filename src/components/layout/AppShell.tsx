@@ -18,7 +18,7 @@ const navLinks = [
   { href: '/cron', label: 'Cron' },
   { href: '/kubernetes', label: '☸ K8s Lab' },
   { href: '/memory', label: 'Memory' },
-]}
+]
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
