@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { execSync } from 'child_process'
-import { strict as assert } from 'assert'
 
 function runCmd(cmd: string): string {
   try {
@@ -10,73 +9,137 @@ function runCmd(cmd: string): string {
   }
 }
 
-function safeJsonParse(raw: string): any {
-  if (!raw) return []
-  try { return JSON.parse(raw) } catch { return [] }
+function safeJson(raw: string): any {
+  if (!raw) return null
+  try { return JSON.parse(raw) } catch { return null }
 }
+
+const IDP_COMPONENTS = [
+  { name: 'Flux', namespace: 'flux-system', icon: '⚡' },
+  { name: 'ArgoCD', namespace: 'argocd', icon: '🐙' },
+  { name: 'Gatekeeper', namespace: 'gatekeeper-system', icon: '🛡' },
+  { name: 'Keycloak', namespace: 'keycloak', icon: '🔑' },
+  { name: 'Trivy', namespace: 'trivy-system', icon: '🔍' },
+  { name: 'Prometheus', namespace: 'monitoring', icon: '📊' },
+  { name: 'midPoint', namespace: 'midpoint', icon: '👤' },
+  { name: 'Ingress', namespace: 'ingress-nginx', icon: '🌐' },
+]
+
+const TENANT_NAMESPACES = ['abwasser', 'agripower', 'stadtwerke-hh']
 
 export async function GET() {
   try {
-    const [kustomizationsRaw, podsRaw, nodesRaw, gitrepositoriesRaw] = [
-      runCmd('flux get kustomizations -A --format json 2>/dev/null || flux get kustomizations --format json'),
-      runCmd('kubectl get pods -A --format json 2>/dev/null'),
+    // Parallel: nodes, pods all-ns, kustomizations, git sources, vuln reports, constraints
+    const [nodesRaw, podsRaw, kustomRaw, gitRaw, vulnRaw, constraintsRaw] = [
       runCmd('kubectl get nodes -o json 2>/dev/null'),
-      runCmd('flux get sources git -A --format json 2>/dev/null || flux get sources git --format json'),
+      runCmd('kubectl get pods -A -o json 2>/dev/null'),
+      runCmd('flux get kustomizations -A --output json 2>/dev/null || echo "[]"'),
+      runCmd('flux get sources git -A --output json 2>/dev/null || echo "[]"'),
+      runCmd('kubectl get vulnerabilityreports -A -o json 2>/dev/null || echo "[]"'),
+      runCmd('kubectl get constraints -A -o json 2>/dev/null || echo "[]"'),
     ]
 
-    // Parse kustomizations
-    let kustomizations: any[] = []
-    try {
-      const kData = safeJsonParse(kustomizationsRaw)
-      kustomizations = Array.isArray(kData) ? kData.map((item: any) => ({
-        name: item.metadata?.name || item.name || '',
-        ready: item.status?.conditions?.find((c: any) => c.type === 'Ready')?.status || item.status || '',
-        suspended: item.spec?.suspended || item.suspended || false,
-        message: item.status?.conditions?.find((c: any) => c.type === 'Ready')?.message || item.message || '',
-        revision: item.status?.artifact?.revision || item.revision || '',
-      })) : []
-    } catch {}
+    const nodesData = safeJson(nodesRaw)
+    const podsData = safeJson(podsRaw)
+    const kustomData = safeJson(kustomRaw)
+    const gitData = safeJson(gitRaw)
+    const vulnData = safeJson(vulnRaw)
+    const constraintsData = safeJson(constraintsRaw)
 
-    // Parse pods
-    let pods: any[] = []
-    try {
-      const pData = safeJsonParse(podsRaw)
-      pods = (pData.items || pData || []).map((pod: any) => ({
-        namespace: pod.metadata?.namespace || '',
-        name: pod.metadata?.name || '',
-        ready: `${pod.status?.readyReplicas ?? 0}/${pod.status?.replicas ?? 0}`,
-        status: pod.status?.phase || 'Unknown',
-        age: pod.metadata?.creationTimestamp || '',
-      }))
-    } catch {}
+    // Cluster overview
+    const nodeItems = nodesData?.items || []
+    const cluster = {
+      name: nodeItems[0]?.metadata?.name?.replace('-control-plane', '') || 'rook-lab',
+      nodeCount: nodeItems.length,
+      readyNodes: nodeItems.filter((n: any) =>
+        n.status?.conditions?.find((c: any) => c.type === 'Ready')?.status === 'True'
+      ).length,
+      k8sVersion: nodeItems[0]?.status?.nodeInfo?.kubeletVersion || '',
+    }
 
-    // Parse nodes
-    let nodes: any[] = []
-    try {
-      const nData = safeJsonParse(nodesRaw)
-      nodes = (nData.items || nData || []).map((node: any) => ({
-        name: node.metadata?.name || '',
-        status: node.status?.conditions?.find((c: any) => c.type === 'Ready')?.status === 'True' ? 'Ready' : 'NotReady',
-        roles: Object.keys(node.metadata?.labels || {}).filter(l => l.startsWith('node-role.kubernetes.io/')).map(l => l.replace('node-role.kubernetes.io/', '')).join(', ') || 'worker',
-        version: node.status?.nodeInfo?.kubeletVersion || '',
-        age: node.metadata?.creationTimestamp || '',
-      }))
-    } catch {}
+    // Pod map: namespace -> {ready, total}
+    const podItems: any[] = podsData?.items || []
+    const nsPods: Record<string, { ready: number; total: number }> = {}
+    for (const pod of podItems) {
+      const ns = pod.metadata?.namespace || 'default'
+      if (!nsPods[ns]) nsPods[ns] = { ready: 0, total: 0 }
+      nsPods[ns].total++
+      const phase = pod.status?.phase
+      const containerStatuses: any[] = pod.status?.containerStatuses || []
+      const allReady = containerStatuses.length > 0 && containerStatuses.every((c: any) => c.ready)
+      if (phase === 'Running' && allReady) nsPods[ns].ready++
+      if (phase === 'Succeeded') nsPods[ns].ready++ // completed jobs count as healthy
+    }
 
-    // Parse gitrepositories
-    let gitrepositories: any[] = []
-    try {
-      const gData = safeJsonParse(gitrepositoriesRaw)
-      gitrepositories = (Array.isArray(gData) ? gData : []).map((repo: any) => ({
-        name: repo.metadata?.name || repo.name || '',
-        ready: repo.status?.conditions?.find((c: any) => c.type === 'Ready')?.status || repo.status || '',
-        suspended: repo.spec?.suspended || repo.suspended || false,
-        url: repo.spec?.url || repo.url || '',
-      }))
-    } catch {}
+    // Component health
+    const components = IDP_COMPONENTS.map(c => {
+      const ns = nsPods[c.namespace] || { ready: 0, total: 0 }
+      return {
+        name: c.name,
+        namespace: c.namespace,
+        icon: c.icon,
+        healthy: ns.total > 0 && ns.ready === ns.total,
+        notFound: ns.total === 0,
+        readyPods: ns.ready,
+        totalPods: ns.total,
+      }
+    })
 
-    return NextResponse.json({ kustomizations, pods, nodes, gitrepositories })
+    // GitOps: kustomizations
+    const kustomItems = Array.isArray(kustomData) ? kustomData : (kustomData?.items || [])
+    const kustomizations = kustomItems.map((k: any) => ({
+      name: k.metadata?.name || k.name || '',
+      namespace: k.metadata?.namespace || '',
+      ready: k.status?.conditions?.find((c: any) => c.type === 'Ready')?.status || k.status || 'Unknown',
+      suspended: k.spec?.suspended || false,
+      revision: k.status?.lastAppliedRevision || k.status?.artifact?.revision || '',
+      message: k.status?.conditions?.find((c: any) => c.type === 'Ready')?.message || '',
+    }))
+
+    const gitItems = Array.isArray(gitData) ? gitData : (gitData?.items || [])
+    const gitrepositories = gitItems.map((r: any) => ({
+      name: r.metadata?.name || r.name || '',
+      namespace: r.metadata?.namespace || '',
+      ready: r.status?.conditions?.find((c: any) => c.type === 'Ready')?.status || r.status || 'Unknown',
+      suspended: r.spec?.suspended || false,
+      url: r.spec?.url || '',
+      revision: r.status?.artifact?.revision || '',
+    }))
+
+    // Security: Trivy vulnerability summary
+    const vulnItems: any[] = vulnData?.items || []
+    const security = { reports: vulnItems.length, critical: 0, high: 0, medium: 0, low: 0, unknown: 0 }
+    for (const report of vulnItems) {
+      const s = report.report?.summary || {}
+      security.critical += s.criticalCount ?? s.CRITICAL ?? 0
+      security.high += s.highCount ?? s.HIGH ?? 0
+      security.medium += s.mediumCount ?? s.MEDIUM ?? 0
+      security.low += s.lowCount ?? s.LOW ?? 0
+      security.unknown += s.unknownCount ?? s.UNKNOWN ?? 0
+    }
+
+    // Security: OPA Gatekeeper constraints
+    const constraintItems: any[] = constraintsData?.items || []
+    const opaViolations = constraintItems.reduce(
+      (sum: number, c: any) => sum + (c.status?.totalViolations || 0), 0
+    )
+
+    // Tenants
+    const tenants = TENANT_NAMESPACES.map(ns => ({
+      namespace: ns,
+      readyPods: nsPods[ns]?.ready || 0,
+      totalPods: nsPods[ns]?.total || 0,
+      status: (nsPods[ns]?.total || 0) > 0 ? 'active' : 'empty',
+    }))
+
+    return NextResponse.json({
+      cluster,
+      components,
+      gitops: { kustomizations, gitrepositories },
+      security: { ...security, opaViolations, opaConstraints: constraintItems.length },
+      tenants,
+    })
   } catch (e: any) {
-    return NextResponse.json({ kustomizations: [], pods: [], nodes: [], gitrepositories: [], error: String(e) }, { status: 500 })
+    return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }
