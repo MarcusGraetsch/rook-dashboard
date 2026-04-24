@@ -126,6 +126,13 @@ const findingBadgeClass = (severity: 'info' | 'warning' | 'error') => {
   }
 }
 
+interface ModelModeFinding {
+  source: string
+  severity: 'info' | 'warning' | 'error'
+  type: string
+  details: string
+}
+
 function formatTimestamp(value?: string) {
   if (!value) return 'unknown'
   const date = new Date(value)
@@ -155,11 +162,58 @@ function reviewStatus(reviewAfter?: string) {
   return { label: `Review ${reviewAfter}`, className: 'bg-cyan-900/40 text-cyan-300' }
 }
 
+function modelModeDetails(findings: ModelModeFinding[] | undefined) {
+  const activeFinding = (findings || []).find((finding) => finding.source === 'model_mode_policy' && finding.type === 'model_mode_active')
+  const usageFindings = (findings || []).filter((finding) => finding.source === 'model_mode_policy' && finding.type.startsWith('model_mode_') && finding.type.endsWith('_usage'))
+
+  const details = {
+    activeMode: 'unknown',
+    effectiveModel: 'unknown',
+    windows: {
+      hour: 'unknown',
+      day: 'unknown',
+      week: 'unknown',
+    },
+    severity: 'info' as 'info' | 'warning' | 'error',
+  }
+
+  if (activeFinding?.details) {
+    const parts = activeFinding.details.split(';').map((part) => part.trim())
+    for (const part of parts) {
+      if (part.startsWith('active_mode=')) {
+        details.activeMode = part.slice('active_mode='.length)
+      }
+      if (part.startsWith('effective_model=')) {
+        details.effectiveModel = part.slice('effective_model='.length)
+      }
+    }
+    details.severity = activeFinding.severity
+  }
+
+  for (const finding of usageFindings) {
+    const windowName = finding.type.replace('model_mode_', '').replace('_usage', '')
+    const match = finding.details.match(/=(\d+)\/(\d+) \((\d+)%\).*reset_at=([^\s]+)/)
+    const label = match
+      ? `${match[1]}/${match[2]} (${match[3]}%) reset ${match[4]}`
+      : finding.details
+
+    if (windowName in details.windows) {
+      details.windows[windowName as keyof typeof details.windows] = label
+    }
+    if (finding.severity === 'warning') {
+      details.severity = 'warning'
+    }
+  }
+
+  return details
+}
+
 export default function DiagnosticsPage() {
   const [data, setData] = useState<DiagnosticsPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [nextRefreshAt, setNextRefreshAt] = useState<number | null>(null)
+  const modelMode = modelModeDetails(data?.control_plane?.findings)
 
   async function load(background = false) {
     if (background) {
@@ -236,7 +290,7 @@ export default function DiagnosticsPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-7 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-4">
         <div className="bg-secondary p-4 rounded-lg border border-gray-700">
           <p className="text-sm text-gray-400">Contract</p>
           <p className={`inline-block mt-2 px-2 py-1 rounded text-xs ${badgeClass(Boolean(data.summary?.contract_ok))}`}>
@@ -253,6 +307,15 @@ export default function DiagnosticsPage() {
           </p>
           <p className="text-xs text-gray-500 mt-1">
             {data.summary?.control_plane_review_due_soon || 0} due soon • {data.summary?.control_plane_review_overdue || 0} overdue
+          </p>
+        </div>
+        <div className="bg-secondary p-4 rounded-lg border border-gray-700">
+          <p className="text-sm text-gray-400">Model Mode</p>
+          <p className={`inline-block mt-2 px-2 py-1 rounded text-xs ${findingBadgeClass(modelMode.severity)}`}>
+            {modelMode.activeMode}
+          </p>
+          <p className="text-xs text-gray-500 mt-2 break-all">
+            {modelMode.effectiveModel}
           </p>
         </div>
         <div className="bg-secondary p-4 rounded-lg border border-gray-700">
@@ -377,6 +440,38 @@ export default function DiagnosticsPage() {
             <div className="flex items-center justify-between">
               <span className="text-gray-400">Exec main status</span>
               <span>{data.dashboard_service?.exec_main_status || 'unknown'}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-secondary p-5 rounded-lg border border-gray-700 space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold">Model Mode</h3>
+              <p className="text-sm text-gray-400 mt-1">
+                Active default/fallback state derived from the control-plane model policy and runtime usage counters.
+              </p>
+            </div>
+            <span className={`px-2 py-1 rounded text-xs ${findingBadgeClass(modelMode.severity)}`}>
+              {modelMode.activeMode}
+            </span>
+          </div>
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center justify-between border-b border-gray-800 pb-2">
+              <span className="text-gray-400">Effective model</span>
+              <span className="font-mono break-all">{modelMode.effectiveModel}</span>
+            </div>
+            <div className="flex items-center justify-between border-b border-gray-800 pb-2">
+              <span className="text-gray-400">Hour window</span>
+              <span className="font-mono text-right">{modelMode.windows.hour}</span>
+            </div>
+            <div className="flex items-center justify-between border-b border-gray-800 pb-2">
+              <span className="text-gray-400">Day window</span>
+              <span className="font-mono text-right">{modelMode.windows.day}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-400">Week window</span>
+              <span className="font-mono text-right">{modelMode.windows.week}</span>
             </div>
           </div>
         </div>
