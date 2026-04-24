@@ -96,6 +96,21 @@ interface DiagnosticsPayload {
     result: string
     exec_main_status: string
   }
+  provider_probe?: {
+    checked_at?: string
+    status: 'ok' | 'error' | 'unavailable'
+    provider_name: string
+    provider_key: string
+    model_ref: string
+    base_url: string
+    api_key_env: string | null
+    endpoint: string
+    http_status: number | null
+    message: string
+    rate_limit_headers: Array<{ name: string; value: string }>
+    model_count: number | null
+    model_ids: string[]
+  }
   tasks?: Array<{
     task_id: string
     project_id: string
@@ -206,6 +221,17 @@ function modelModeDetails(findings: ModelModeFinding[] | undefined) {
   }
 
   return details
+}
+
+function providerProbeBadgeClass(status?: 'ok' | 'error' | 'unavailable') {
+  switch (status) {
+    case 'ok':
+      return 'bg-green-900/40 text-green-300'
+    case 'unavailable':
+      return 'bg-slate-800 text-slate-200'
+    default:
+      return 'bg-red-900/40 text-red-300'
+  }
 }
 
 export default function DiagnosticsPage() {
@@ -472,6 +498,48 @@ export default function DiagnosticsPage() {
             <div className="flex items-center justify-between">
               <span className="text-gray-400">Week window</span>
               <span className="font-mono text-right">{modelMode.windows.week}</span>
+            </div>
+            <div className="border-t border-gray-800 pt-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">Live provider probe</span>
+                <span className={`px-2 py-1 rounded text-xs ${providerProbeBadgeClass(data.provider_probe?.status)}`}>
+                  {data.provider_probe?.status || 'unknown'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">Provider</span>
+                <span className="font-mono text-right break-all">{data.provider_probe?.provider_name || 'unknown'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">Endpoint</span>
+                <span className="font-mono text-right break-all">{data.provider_probe?.endpoint || 'unknown'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">HTTP status</span>
+                <span className="font-mono text-right">{data.provider_probe?.http_status ?? 'n/a'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">Models returned</span>
+                <span className="font-mono text-right">{data.provider_probe?.model_count ?? 'n/a'}</span>
+              </div>
+              <p className="text-xs text-gray-500 break-words">
+                {data.provider_probe?.message || 'No live provider probe available.'}
+              </p>
+              {data.provider_probe?.rate_limit_headers?.length ? (
+                <div className="space-y-1">
+                  <p className="text-xs text-gray-400">Rate-limit headers</p>
+                  {data.provider_probe.rate_limit_headers.map((header) => (
+                    <div key={header.name} className="flex items-center justify-between gap-3 text-xs border-b border-gray-800 pb-1">
+                      <span className="text-gray-500">{header.name}</span>
+                      <span className="font-mono text-right break-all">{header.value}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-amber-200/90">
+                  The provider probe did not expose quota counters on this endpoint.
+                </p>
+              )}
             </div>
           </div>
         </div>

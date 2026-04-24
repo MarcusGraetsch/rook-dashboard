@@ -3,6 +3,7 @@ import { spawn } from 'child_process'
 import { promises as fs } from 'fs'
 import { getDb } from '@/lib/db'
 import { collectKanbanIntegrityFindings } from '@/lib/control/kanban-integrity'
+import { probeProviderUsage } from '@/lib/control/provider-probe'
 import { getCanonicalTasks } from '@/lib/control/tasks'
 
 export const dynamic = 'force-dynamic'
@@ -277,7 +278,7 @@ function remediationForFinding(finding: ControlPlaneFinding): FindingRemediation
 
 export async function GET() {
   try {
-    const [contract, controlPlane, integrity, reconciliation, backupIntegrity, runtimeSmokeRaw, tasks, dashboardServiceRaw, kanbanIntegrity] = await Promise.all([
+    const [contract, controlPlane, integrity, reconciliation, backupIntegrity, runtimeSmokeRaw, tasks, dashboardServiceRaw, kanbanIntegrity, providerProbe] = await Promise.all([
       runNodeJsonCheck('/root/.openclaw/workspace/operations/bin/check-openclaw-contract.mjs'),
       runNodeJsonCheck(RUNTIME_CONTROL_PLANE_SCRIPT),
       runNodeJsonCheck('/root/.openclaw/workspace/operations/bin/check-canonical-task-integrity.mjs'),
@@ -289,6 +290,7 @@ export async function GET() {
         (error: any) => `error=${error?.message || 'unknown'}`
       ),
       collectKanbanIntegrityFindings(getDb()),
+      probeProviderUsage(),
     ])
 
     const runtimeSmoke = JSON.parse(runtimeSmokeRaw || '{}')
@@ -356,6 +358,7 @@ export async function GET() {
       runtime_smoke: runtimeSmoke,
       dashboard_service: dashboardService,
       kanban_integrity: kanbanIntegrityWithRemediation,
+      provider_probe: providerProbe,
       tasks: taskDiagnostics,
       summary: {
         contract_ok: Boolean(contract?.ok),
@@ -375,6 +378,8 @@ export async function GET() {
         reconciliation_commit_only: reconciliationSummary.commit_evidence_without_pr_metadata,
         reconciliation_no_evidence: reconciliationSummary.done_without_merge_evidence,
         reconciliation_direct_main: reconciliationSummary.direct_to_main_without_merge_evidence,
+        provider_probe_ok: providerProbe?.status === 'ok',
+        provider_probe_status: providerProbe?.status || 'unknown',
       },
     })
   } catch (error: any) {
