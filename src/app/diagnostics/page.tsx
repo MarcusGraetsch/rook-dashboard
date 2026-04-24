@@ -608,7 +608,19 @@ export default function DiagnosticsPage() {
       </div>
 
       <div className="bg-secondary p-5 rounded-lg border border-gray-700 space-y-4">
-        <h3 className="text-lg font-semibold">Done Reconciliation</h3>
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold">Done Reconciliation</h3>
+          <p className="text-sm text-gray-400">
+            This panel checks whether historical <span className="font-mono text-gray-300">done</span> tasks still have
+            matching completion evidence, usually a merged PR or an equivalent durable record. It is a consistency
+            check, not a runtime error.
+          </p>
+          <p className="text-sm text-gray-400">
+            Usually you do not need to do anything if the count is zero. If findings are listed, follow the
+            per-item guidance: open PRs should be finished or synced, commit-only entries may need metadata backfill,
+            and tasks with no evidence should be reviewed against the actual completion trail.
+          </p>
+        </div>
         {data.reconciliation?.status !== 'error' ? (
           <div className="grid grid-cols-4 gap-3 text-sm">
             <div className="rounded border border-gray-700 p-3">
