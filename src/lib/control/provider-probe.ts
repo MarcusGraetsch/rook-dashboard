@@ -13,6 +13,7 @@ const PROVIDER_ALIASES = new Map<string, string[]>([
 ])
 
 type ProviderStatus = 'ok' | 'error' | 'unavailable'
+type QuotaStatus = 'available' | 'unavailable' | 'error'
 
 interface ProviderConfig {
   baseUrl?: string
@@ -47,6 +48,7 @@ export interface RateLimitHeader {
 export interface ProviderProbeResult {
   checked_at: string
   status: ProviderStatus
+  quota_status: QuotaStatus
   provider_name: string
   provider_key: string
   model_ref: string
@@ -133,6 +135,7 @@ export async function probeProviderUsage(): Promise<ProviderProbeResult> {
     return {
       checked_at: checkedAt,
       status: 'unavailable',
+      quota_status: 'unavailable',
       provider_name: 'unknown',
       provider_key: 'unknown',
       model_ref: modelRef || 'unknown',
@@ -155,6 +158,7 @@ export async function probeProviderUsage(): Promise<ProviderProbeResult> {
     return {
       checked_at: checkedAt,
       status: 'unavailable',
+      quota_status: 'unavailable',
       provider_name: providerName,
       provider_key: providerKey,
       model_ref: modelRef,
@@ -179,6 +183,7 @@ export async function probeProviderUsage(): Promise<ProviderProbeResult> {
     return {
       checked_at: checkedAt,
       status: 'unavailable',
+      quota_status: 'unavailable',
       provider_name: providerName,
       provider_key: providerKey,
       model_ref: modelRef,
@@ -197,6 +202,7 @@ export async function probeProviderUsage(): Promise<ProviderProbeResult> {
     return {
       checked_at: checkedAt,
       status: 'unavailable',
+      quota_status: 'unavailable',
       provider_name: providerName,
       provider_key: providerKey,
       model_ref: modelRef,
@@ -237,10 +243,13 @@ export async function probeProviderUsage(): Promise<ProviderProbeResult> {
     }
 
     const modelIds = summarizeModelIds(payload)
+    const quotaStatus: QuotaStatus = rateLimitHeaders.length > 0
+      ? 'available'
+      : 'unavailable'
     const providerMessage = response.ok
-      ? rateLimitHeaders.length > 0
-        ? 'Provider reachable and rate-limit headers exposed.'
-        : 'Provider reachable; this endpoint did not expose quota counters.'
+      ? quotaStatus === 'available'
+        ? 'Provider reachable and quota counters exposed.'
+        : 'Provider reachable; quota counters unavailable on this endpoint.'
       : (typeof payload?.error?.message === 'string'
         ? payload.error.message
         : `Provider returned HTTP ${response.status}.`)
@@ -248,6 +257,7 @@ export async function probeProviderUsage(): Promise<ProviderProbeResult> {
     return {
       checked_at: checkedAt,
       status: response.ok ? 'ok' : 'error',
+      quota_status: response.ok ? quotaStatus : 'error',
       provider_name: providerName,
       provider_key: providerKey,
       model_ref: modelRef,
@@ -264,6 +274,7 @@ export async function probeProviderUsage(): Promise<ProviderProbeResult> {
     return {
       checked_at: checkedAt,
       status: 'error',
+      quota_status: 'error',
       provider_name: providerName,
       provider_key: providerKey,
       model_ref: modelRef,

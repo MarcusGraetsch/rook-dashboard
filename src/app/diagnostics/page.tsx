@@ -99,6 +99,7 @@ interface DiagnosticsPayload {
   provider_probe?: {
     checked_at?: string
     status: 'ok' | 'error' | 'unavailable'
+    quota_status: 'available' | 'unavailable' | 'error'
     provider_name: string
     provider_key: string
     model_ref: string
@@ -229,6 +230,17 @@ function providerProbeBadgeClass(status?: 'ok' | 'error' | 'unavailable') {
       return 'bg-green-900/40 text-green-300'
     case 'unavailable':
       return 'bg-slate-800 text-slate-200'
+    default:
+      return 'bg-red-900/40 text-red-300'
+  }
+}
+
+function quotaProbeBadgeClass(status?: 'available' | 'unavailable' | 'error') {
+  switch (status) {
+    case 'available':
+      return 'bg-green-900/40 text-green-300'
+    case 'unavailable':
+      return 'bg-amber-900/40 text-amber-300'
     default:
       return 'bg-red-900/40 text-red-300'
   }
@@ -504,6 +516,12 @@ export default function DiagnosticsPage() {
                 <span className="text-gray-400">Live provider probe</span>
                 <span className={`px-2 py-1 rounded text-xs ${providerProbeBadgeClass(data.provider_probe?.status)}`}>
                   {data.provider_probe?.status || 'unknown'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">Quota signal</span>
+                <span className={`px-2 py-1 rounded text-xs ${quotaProbeBadgeClass(data.provider_probe?.quota_status)}`}>
+                  {data.provider_probe?.quota_status || 'unknown'}
                 </span>
               </div>
               <div className="flex items-center justify-between">

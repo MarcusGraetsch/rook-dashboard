@@ -380,6 +380,8 @@ export async function GET() {
         reconciliation_direct_main: reconciliationSummary.direct_to_main_without_merge_evidence,
         provider_probe_ok: providerProbe?.status === 'ok',
         provider_probe_status: providerProbe?.status || 'unknown',
+        provider_probe_quota_ok: providerProbe?.quota_status === 'available',
+        provider_probe_quota_status: providerProbe?.quota_status || 'unknown',
       },
     })
   } catch (error: any) {
