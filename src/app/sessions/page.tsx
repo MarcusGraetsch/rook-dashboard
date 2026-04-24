@@ -19,33 +19,60 @@ const CHANNELS = ['all', 'telegram', 'cli', 'web', 'discord']
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [source, setSource] = useState('unknown')
   const [search, setSearch] = useState('')
   const [channelFilter, setChannelFilter] = useState('all')
   const [sortBy, setSortBy] = useState<'time' | 'tokens'>('time')
 
   useEffect(() => {
     async function fetchSessions() {
+      const normalizeGatewaySession = (s: any): Session => ({
+        key: s.key || s.sessionId || s.name || 'unknown',
+        displayName: s.displayName || `${s.agent || 'agent'} / ${(s.sessionId || s.key || s.name || 'session').substring(0, 8)}`,
+        model: s.model || 'unknown',
+        totalTokens: Number(s.totalTokens || s.tokens || 0),
+        updatedAt: new Date(s.updatedAt || s.updated_at || 0).getTime(),
+        lastChannel: s.lastChannel || s.channel || 'unknown',
+        contextTokens: Number(s.contextTokens || 0),
+        agent: s.agent,
+      })
+
       try {
-        // Try the new memory/tokens API first, fallback to gateway
-        const res = await fetch('/api/memory/tokens')
-        if (res.ok) {
-          const data = await res.json()
+        setError(null)
+
+        const gatewayRes = await fetch('/api/gateway/sessions')
+        if (gatewayRes.ok) {
+          const data = await gatewayRes.json()
+          setSessions((data.sessions || []).map(normalizeGatewaySession))
+          setSource(data.source || 'local-session-index')
+          return
+        }
+
+        const tokensRes = await fetch('/api/memory/tokens')
+        if (tokensRes.ok) {
+          const data = await tokensRes.json()
           setSessions((data.sessions || []).map((s: any) => ({
             key: s.name,
-            displayName: s.agent + ' / ' + s.name.substring(0, 8),
+            displayName: `${s.agent} / ${String(s.name || 'session').substring(0, 8)}`,
             model: 'unknown',
-            totalTokens: s.tokens,
+            totalTokens: Number(s.tokens || 0),
             updatedAt: new Date(s.updatedAt).getTime(),
-            lastChannel: 'web',
+            lastChannel: s.channel || 'web',
             contextTokens: 0,
             agent: s.agent,
           })))
-        } else {
-          setError(true)
+          setSource('local-token-index')
+          return
         }
+
+        setSessions([])
+        setSource('unavailable')
+        setError('Lokaler Session-Index ist nicht erreichbar.')
       } catch (e) {
-        setError(true)
+        setSessions([])
+        setSource('unavailable')
+        setError(e instanceof Error ? e.message : 'Sessions konnten nicht geladen werden.')
       } finally {
         setLoading(false)
       }
@@ -165,7 +192,14 @@ export default function SessionsPage() {
       {/* Error */}
       {error && (
         <div className="bg-red-900/50 border border-red-500 p-4 rounded-lg">
-          <p className="text-red-400">⚠️ Gateway nicht erreichbar</p>
+          <p className="text-red-400">⚠️ {error}</p>
+          <p className="text-xs text-red-200 mt-1">Quelle: {source}</p>
+        </div>
+      )}
+
+      {!error && source !== 'unknown' && (
+        <div className="bg-secondary border border-gray-700 p-3 rounded-lg text-xs text-gray-400">
+          Datenquelle: <span className="font-mono text-gray-300">{source}</span>
         </div>
       )}
       
