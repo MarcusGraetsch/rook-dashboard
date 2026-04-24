@@ -574,7 +574,102 @@ export default function DiagnosticsPage() {
           ))}
         </div>
 
-        <div className="bg-secondary p-5 rounded-lg border border-gray-700 space-y-3 col-span-2">
+        <div className="bg-secondary p-5 rounded-lg border border-gray-700 space-y-3">
+          <h3 className="text-lg font-semibold">Backup Integrity</h3>
+        {data.backup_integrity?.status === 'error' ? (
+          <div className="rounded border border-red-900/50 bg-red-950/20 p-4 space-y-2">
+            <p className="text-red-300 text-sm font-medium">Backup integrity check failed to run.</p>
+            <p className="text-xs text-red-200 break-all">{data.backup_integrity.message || 'Unknown backup integrity check error.'}</p>
+            <pre className="overflow-x-auto rounded bg-slate-950/80 p-3 text-xs text-red-200">
+              <code>node /root/.openclaw/workspace/operations/bin/check-runtime-backup-integrity.mjs</code>
+            </pre>
+          </div>
+        ) : data.backup_integrity?.ok ? (
+          <p className="text-green-300 text-sm">
+            Latest backup looks restorable. {data.backup_integrity.latest_backup || 'No backup path reported.'}
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {((data.backup_integrity?.issues?.length ? data.backup_integrity.issues : ['Backup integrity check failed.'])).map((issue) => (
+              <p key={issue} className="text-sm text-red-300">{issue}</p>
+            ))}
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          {(data.backup_integrity?.checks || []).map((check) => (
+            <div key={check.name} className="rounded border border-gray-700 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-mono text-xs text-gray-300">{check.name}</p>
+                <span className={`px-2 py-1 rounded text-xs ${badgeClass(check.ok)}`}>
+                  {check.ok ? 'ok' : 'error'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mt-2 break-all">{check.details}</p>
+            </div>
+          ))}
+        </div>
+        </div>
+
+        <div className="bg-secondary p-5 rounded-lg border border-gray-700 space-y-3">
+          <h3 className="text-lg font-semibold">Contract Checks</h3>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {(data.contract?.checks || []).map((check) => (
+              <div key={check.name} className="rounded border border-gray-700 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-mono text-xs text-gray-300">{check.name}</p>
+                  <span className={`px-2 py-1 rounded text-xs ${badgeClass(check.ok)}`}>
+                    {check.ok ? 'ok' : 'error'}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">{check.details}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-secondary p-5 rounded-lg border border-gray-700 space-y-4">
+          <h3 className="text-lg font-semibold">Task Execution View</h3>
+          <div className="space-y-3">
+            {(data.tasks || []).map((task) => (
+              <div key={`${task.project_id}:${task.task_id}`} className="rounded border border-gray-700 p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs text-gray-400 font-mono">{task.project_id}</p>
+                    <p className="text-sm font-semibold">{task.task_id}</p>
+                    <p className="text-xs text-gray-500 mt-1">{task.related_repo}</p>
+                    <p className="text-xs text-gray-500 font-mono break-all mt-1">{task.branch}</p>
+                  </div>
+                  <div className="text-right space-y-1">
+                    <p className="text-xs px-2 py-1 rounded bg-slate-800 text-slate-200 inline-block">
+                      {task.status}
+                    </p>
+                    <p className="text-xs text-gray-400">{task.updated_at}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs mt-4 text-gray-300">
+                  <div>
+                    <p className="text-gray-500">Repo view</p>
+                    <p>{task.repo_view_strategy}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Reconciliation</p>
+                    <p>{task.reconciliation_status}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">PR state</p>
+                    <p>{task.pr_number ? `#${task.pr_number} ${task.pr_state || 'unknown'}` : (task.pr_state || 'none')}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Failure</p>
+                    <p>{task.failure_reason || task.blocked_reason || 'none'}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-secondary p-5 rounded-lg border border-gray-700 space-y-4 col-span-2">
           <h3 className="text-lg font-semibold">Integrity</h3>
           {data.integrity?.status === 'error' ? (
             <div className="rounded border border-red-900/50 bg-red-950/20 p-4 space-y-2">
@@ -682,101 +777,6 @@ export default function DiagnosticsPage() {
         ) : (
           <p className="text-green-300 text-sm">No historical done tasks are missing merged completion evidence.</p>
         )}
-      </div>
-
-      <div className="bg-secondary p-5 rounded-lg border border-gray-700 space-y-4">
-        <h3 className="text-lg font-semibold">Task Execution View</h3>
-        <div className="space-y-3">
-          {(data.tasks || []).map((task) => (
-            <div key={`${task.project_id}:${task.task_id}`} className="rounded border border-gray-700 p-4">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs text-gray-400 font-mono">{task.project_id}</p>
-                  <p className="text-sm font-semibold">{task.task_id}</p>
-                  <p className="text-xs text-gray-500 mt-1">{task.related_repo}</p>
-                  <p className="text-xs text-gray-500 font-mono break-all mt-1">{task.branch}</p>
-                </div>
-                <div className="text-right space-y-1">
-                  <p className="text-xs px-2 py-1 rounded bg-slate-800 text-slate-200 inline-block">
-                    {task.status}
-                  </p>
-                  <p className="text-xs text-gray-400">{task.updated_at}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3 text-xs mt-4 text-gray-300">
-                <div>
-                  <p className="text-gray-500">Repo view</p>
-                  <p>{task.repo_view_strategy}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Reconciliation</p>
-                  <p>{task.reconciliation_status}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">PR state</p>
-                  <p>{task.pr_number ? `#${task.pr_number} ${task.pr_state || 'unknown'}` : (task.pr_state || 'none')}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Failure</p>
-                  <p>{task.failure_reason || task.blocked_reason || 'none'}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="bg-secondary p-5 rounded-lg border border-gray-700 space-y-4">
-        <h3 className="text-lg font-semibold">Backup Integrity</h3>
-        {data.backup_integrity?.status === 'error' ? (
-          <div className="rounded border border-red-900/50 bg-red-950/20 p-4 space-y-2">
-            <p className="text-red-300 text-sm font-medium">Backup integrity check failed to run.</p>
-            <p className="text-xs text-red-200 break-all">{data.backup_integrity.message || 'Unknown backup integrity check error.'}</p>
-            <pre className="overflow-x-auto rounded bg-slate-950/80 p-3 text-xs text-red-200">
-              <code>node /root/.openclaw/workspace/operations/bin/check-runtime-backup-integrity.mjs</code>
-            </pre>
-          </div>
-        ) : data.backup_integrity?.ok ? (
-          <p className="text-green-300 text-sm">
-            Latest backup looks restorable. {data.backup_integrity.latest_backup || 'No backup path reported.'}
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {((data.backup_integrity?.issues?.length ? data.backup_integrity.issues : ['Backup integrity check failed.'])).map((issue) => (
-              <p key={issue} className="text-sm text-red-300">{issue}</p>
-            ))}
-          </div>
-        )}
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          {(data.backup_integrity?.checks || []).map((check) => (
-            <div key={check.name} className="rounded border border-gray-700 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-mono text-xs text-gray-300">{check.name}</p>
-                <span className={`px-2 py-1 rounded text-xs ${badgeClass(check.ok)}`}>
-                  {check.ok ? 'ok' : 'error'}
-                </span>
-              </div>
-              <p className="text-xs text-gray-500 mt-2 break-all">{check.details}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="bg-secondary p-5 rounded-lg border border-gray-700 space-y-3">
-        <h3 className="text-lg font-semibold">Contract Checks</h3>
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          {(data.contract?.checks || []).map((check) => (
-            <div key={check.name} className="rounded border border-gray-700 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-mono text-xs text-gray-300">{check.name}</p>
-                <span className={`px-2 py-1 rounded text-xs ${badgeClass(check.ok)}`}>
-                  {check.ok ? 'ok' : 'error'}
-                </span>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">{check.details}</p>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   )
