@@ -41,7 +41,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           w-64 bg-secondary p-4 border-r border-gray-700
           transform transition-transform duration-200 ease-in-out
           lg:transform-none lg:z-auto
-          overflow-y-auto
+          overflow-y-auto h-[100dvh]
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
       >
