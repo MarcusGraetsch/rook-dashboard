@@ -1,0 +1,882 @@
+{
+  "years": [
+    2009,
+    2010,
+    2011,
+    2012,
+    2013,
+    2014,
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025,
+    2026
+  ],
+  "total": [
+    {
+      "year": 2009,
+      "value": 100
+    },
+    {
+      "year": 2010,
+      "value": 134
+    },
+    {
+      "year": 2011,
+      "value": 659
+    },
+    {
+      "year": 2012,
+      "value": 845
+    },
+    {
+      "year": 2013,
+      "value": 663
+    },
+    {
+      "year": 2014,
+      "value": 579
+    },
+    {
+      "year": 2015,
+      "value": 1258
+    },
+    {
+      "year": 2016,
+      "value": 1035
+    },
+    {
+      "year": 2017,
+      "value": 623
+    },
+    {
+      "year": 2018,
+      "value": 747
+    },
+    {
+      "year": 2019,
+      "value": 774
+    },
+    {
+      "year": 2020,
+      "value": 712
+    },
+    {
+      "year": 2021,
+      "value": 580
+    },
+    {
+      "year": 2022,
+      "value": 344
+    },
+    {
+      "year": 2023,
+      "value": 158
+    },
+    {
+      "year": 2024,
+      "value": 204
+    },
+    {
+      "year": 2025,
+      "value": 354
+    },
+    {
+      "year": 2026,
+      "value": 78
+    }
+  ],
+  "axes": {
+    "OUTLIER / Rauschen": [
+      {
+        "year": 2009,
+        "value": 17
+      },
+      {
+        "year": 2010,
+        "value": 34
+      },
+      {
+        "year": 2011,
+        "value": 189
+      },
+      {
+        "year": 2012,
+        "value": 208
+      },
+      {
+        "year": 2013,
+        "value": 186
+      },
+      {
+        "year": 2014,
+        "value": 122
+      },
+      {
+        "year": 2015,
+        "value": 295
+      },
+      {
+        "year": 2016,
+        "value": 232
+      },
+      {
+        "year": 2017,
+        "value": 130
+      },
+      {
+        "year": 2018,
+        "value": 175
+      },
+      {
+        "year": 2019,
+        "value": 181
+      },
+      {
+        "year": 2020,
+        "value": 169
+      },
+      {
+        "year": 2021,
+        "value": 116
+      },
+      {
+        "year": 2022,
+        "value": 59
+      },
+      {
+        "year": 2023,
+        "value": 35
+      },
+      {
+        "year": 2024,
+        "value": 41
+      },
+      {
+        "year": 2025,
+        "value": 76
+      },
+      {
+        "year": 2026,
+        "value": 14
+      }
+    ],
+    "technikkritisch": [
+      {
+        "year": 2009,
+        "value": 1
+      },
+      {
+        "year": 2010,
+        "value": 1
+      },
+      {
+        "year": 2011,
+        "value": 2
+      },
+      {
+        "year": 2012,
+        "value": 9
+      },
+      {
+        "year": 2013,
+        "value": 10
+      },
+      {
+        "year": 2014,
+        "value": 6
+      },
+      {
+        "year": 2015,
+        "value": 19
+      },
+      {
+        "year": 2016,
+        "value": 13
+      },
+      {
+        "year": 2017,
+        "value": 8
+      },
+      {
+        "year": 2018,
+        "value": 17
+      },
+      {
+        "year": 2019,
+        "value": 18
+      },
+      {
+        "year": 2020,
+        "value": 16
+      },
+      {
+        "year": 2021,
+        "value": 19
+      },
+      {
+        "year": 2022,
+        "value": 6
+      },
+      {
+        "year": 2023,
+        "value": 7
+      },
+      {
+        "year": 2024,
+        "value": 7
+      },
+      {
+        "year": 2025,
+        "value": 14
+      },
+      {
+        "year": 2026,
+        "value": 1
+      }
+    ],
+    "politisch-organisatorisch": [
+      {
+        "year": 2009,
+        "value": 8
+      },
+      {
+        "year": 2010,
+        "value": 5
+      },
+      {
+        "year": 2011,
+        "value": 36
+      },
+      {
+        "year": 2012,
+        "value": 90
+      },
+      {
+        "year": 2013,
+        "value": 57
+      },
+      {
+        "year": 2014,
+        "value": 47
+      },
+      {
+        "year": 2015,
+        "value": 100
+      },
+      {
+        "year": 2016,
+        "value": 110
+      },
+      {
+        "year": 2017,
+        "value": 68
+      },
+      {
+        "year": 2018,
+        "value": 66
+      },
+      {
+        "year": 2019,
+        "value": 69
+      },
+      {
+        "year": 2020,
+        "value": 31
+      },
+      {
+        "year": 2021,
+        "value": 21
+      },
+      {
+        "year": 2022,
+        "value": 19
+      },
+      {
+        "year": 2023,
+        "value": 1
+      },
+      {
+        "year": 2024,
+        "value": 8
+      },
+      {
+        "year": 2025,
+        "value": 7
+      },
+      {
+        "year": 2026,
+        "value": 2
+      }
+    ],
+    "affektiv/resonanzbezogen": [
+      {
+        "year": 2009,
+        "value": 0
+      },
+      {
+        "year": 2010,
+        "value": 6
+      },
+      {
+        "year": 2011,
+        "value": 3
+      },
+      {
+        "year": 2012,
+        "value": 4
+      },
+      {
+        "year": 2013,
+        "value": 4
+      },
+      {
+        "year": 2014,
+        "value": 6
+      },
+      {
+        "year": 2015,
+        "value": 10
+      },
+      {
+        "year": 2016,
+        "value": 12
+      },
+      {
+        "year": 2017,
+        "value": 7
+      },
+      {
+        "year": 2018,
+        "value": 7
+      },
+      {
+        "year": 2019,
+        "value": 9
+      },
+      {
+        "year": 2020,
+        "value": 21
+      },
+      {
+        "year": 2021,
+        "value": 3
+      },
+      {
+        "year": 2022,
+        "value": 5
+      },
+      {
+        "year": 2023,
+        "value": 2
+      },
+      {
+        "year": 2024,
+        "value": 0
+      },
+      {
+        "year": 2025,
+        "value": 0
+      },
+      {
+        "year": 2026,
+        "value": 0
+      }
+    ],
+    "psycho-sozial": [
+      {
+        "year": 2009,
+        "value": 3
+      },
+      {
+        "year": 2010,
+        "value": 2
+      },
+      {
+        "year": 2011,
+        "value": 4
+      },
+      {
+        "year": 2012,
+        "value": 5
+      },
+      {
+        "year": 2013,
+        "value": 2
+      },
+      {
+        "year": 2014,
+        "value": 6
+      },
+      {
+        "year": 2015,
+        "value": 4
+      },
+      {
+        "year": 2016,
+        "value": 2
+      },
+      {
+        "year": 2017,
+        "value": 2
+      },
+      {
+        "year": 2018,
+        "value": 4
+      },
+      {
+        "year": 2019,
+        "value": 5
+      },
+      {
+        "year": 2020,
+        "value": 4
+      },
+      {
+        "year": 2021,
+        "value": 4
+      },
+      {
+        "year": 2022,
+        "value": 0
+      },
+      {
+        "year": 2023,
+        "value": 1
+      },
+      {
+        "year": 2024,
+        "value": 0
+      },
+      {
+        "year": 2025,
+        "value": 2
+      },
+      {
+        "year": 2026,
+        "value": 0
+      }
+    ],
+    "materialistisch": [
+      {
+        "year": 2009,
+        "value": 1
+      },
+      {
+        "year": 2010,
+        "value": 0
+      },
+      {
+        "year": 2011,
+        "value": 3
+      },
+      {
+        "year": 2012,
+        "value": 11
+      },
+      {
+        "year": 2013,
+        "value": 9
+      },
+      {
+        "year": 2014,
+        "value": 5
+      },
+      {
+        "year": 2015,
+        "value": 19
+      },
+      {
+        "year": 2016,
+        "value": 9
+      },
+      {
+        "year": 2017,
+        "value": 4
+      },
+      {
+        "year": 2018,
+        "value": 6
+      },
+      {
+        "year": 2019,
+        "value": 10
+      },
+      {
+        "year": 2020,
+        "value": 13
+      },
+      {
+        "year": 2021,
+        "value": 3
+      },
+      {
+        "year": 2022,
+        "value": 0
+      },
+      {
+        "year": 2023,
+        "value": 2
+      },
+      {
+        "year": 2024,
+        "value": 1
+      },
+      {
+        "year": 2025,
+        "value": 3
+      },
+      {
+        "year": 2026,
+        "value": 5
+      }
+    ],
+    "materialistisch / technikkritisch": [
+      {
+        "year": 2009,
+        "value": 0
+      },
+      {
+        "year": 2010,
+        "value": 0
+      },
+      {
+        "year": 2011,
+        "value": 2
+      },
+      {
+        "year": 2012,
+        "value": 2
+      },
+      {
+        "year": 2013,
+        "value": 2
+      },
+      {
+        "year": 2014,
+        "value": 3
+      },
+      {
+        "year": 2015,
+        "value": 3
+      },
+      {
+        "year": 2016,
+        "value": 3
+      },
+      {
+        "year": 2017,
+        "value": 2
+      },
+      {
+        "year": 2018,
+        "value": 1
+      },
+      {
+        "year": 2019,
+        "value": 0
+      },
+      {
+        "year": 2020,
+        "value": 0
+      },
+      {
+        "year": 2021,
+        "value": 3
+      },
+      {
+        "year": 2022,
+        "value": 3
+      },
+      {
+        "year": 2023,
+        "value": 1
+      },
+      {
+        "year": 2024,
+        "value": 1
+      },
+      {
+        "year": 2025,
+        "value": 3
+      },
+      {
+        "year": 2026,
+        "value": 0
+      }
+    ],
+    "biografisch / allt\u00e4glich": [
+      {
+        "year": 2009,
+        "value": 70
+      },
+      {
+        "year": 2010,
+        "value": 86
+      },
+      {
+        "year": 2011,
+        "value": 420
+      },
+      {
+        "year": 2012,
+        "value": 516
+      },
+      {
+        "year": 2013,
+        "value": 393
+      },
+      {
+        "year": 2014,
+        "value": 384
+      },
+      {
+        "year": 2015,
+        "value": 808
+      },
+      {
+        "year": 2016,
+        "value": 654
+      },
+      {
+        "year": 2017,
+        "value": 402
+      },
+      {
+        "year": 2018,
+        "value": 471
+      },
+      {
+        "year": 2019,
+        "value": 482
+      },
+      {
+        "year": 2020,
+        "value": 458
+      },
+      {
+        "year": 2021,
+        "value": 411
+      },
+      {
+        "year": 2022,
+        "value": 252
+      },
+      {
+        "year": 2023,
+        "value": 109
+      },
+      {
+        "year": 2024,
+        "value": 146
+      },
+      {
+        "year": 2025,
+        "value": 249
+      },
+      {
+        "year": 2026,
+        "value": 56
+      }
+    ]
+  },
+  "chart": [
+    {
+      "year": 2009,
+      "OUTLIER / Rauschen": 17,
+      "technikkritisch": 1,
+      "politisch-organisatorisch": 8,
+      "affektiv/resonanzbezogen": 0,
+      "psycho-sozial": 3,
+      "materialistisch": 1,
+      "materialistisch / technikkritisch": 0
+    },
+    {
+      "year": 2010,
+      "OUTLIER / Rauschen": 34,
+      "technikkritisch": 1,
+      "politisch-organisatorisch": 5,
+      "affektiv/resonanzbezogen": 6,
+      "psycho-sozial": 2,
+      "materialistisch": 0,
+      "materialistisch / technikkritisch": 0
+    },
+    {
+      "year": 2011,
+      "OUTLIER / Rauschen": 189,
+      "technikkritisch": 2,
+      "politisch-organisatorisch": 36,
+      "affektiv/resonanzbezogen": 3,
+      "psycho-sozial": 4,
+      "materialistisch": 3,
+      "materialistisch / technikkritisch": 2
+    },
+    {
+      "year": 2012,
+      "OUTLIER / Rauschen": 208,
+      "technikkritisch": 9,
+      "politisch-organisatorisch": 90,
+      "affektiv/resonanzbezogen": 4,
+      "psycho-sozial": 5,
+      "materialistisch": 11,
+      "materialistisch / technikkritisch": 2
+    },
+    {
+      "year": 2013,
+      "OUTLIER / Rauschen": 186,
+      "technikkritisch": 10,
+      "politisch-organisatorisch": 57,
+      "affektiv/resonanzbezogen": 4,
+      "psycho-sozial": 2,
+      "materialistisch": 9,
+      "materialistisch / technikkritisch": 2
+    },
+    {
+      "year": 2014,
+      "OUTLIER / Rauschen": 122,
+      "technikkritisch": 6,
+      "politisch-organisatorisch": 47,
+      "affektiv/resonanzbezogen": 6,
+      "psycho-sozial": 6,
+      "materialistisch": 5,
+      "materialistisch / technikkritisch": 3
+    },
+    {
+      "year": 2015,
+      "OUTLIER / Rauschen": 295,
+      "technikkritisch": 19,
+      "politisch-organisatorisch": 100,
+      "affektiv/resonanzbezogen": 10,
+      "psycho-sozial": 4,
+      "materialistisch": 19,
+      "materialistisch / technikkritisch": 3
+    },
+    {
+      "year": 2016,
+      "OUTLIER / Rauschen": 232,
+      "technikkritisch": 13,
+      "politisch-organisatorisch": 110,
+      "affektiv/resonanzbezogen": 12,
+      "psycho-sozial": 2,
+      "materialistisch": 9,
+      "materialistisch / technikkritisch": 3
+    },
+    {
+      "year": 2017,
+      "OUTLIER / Rauschen": 130,
+      "technikkritisch": 8,
+      "politisch-organisatorisch": 68,
+      "affektiv/resonanzbezogen": 7,
+      "psycho-sozial": 2,
+      "materialistisch": 4,
+      "materialistisch / technikkritisch": 2
+    },
+    {
+      "year": 2018,
+      "OUTLIER / Rauschen": 175,
+      "technikkritisch": 17,
+      "politisch-organisatorisch": 66,
+      "affektiv/resonanzbezogen": 7,
+      "psycho-sozial": 4,
+      "materialistisch": 6,
+      "materialistisch / technikkritisch": 1
+    },
+    {
+      "year": 2019,
+      "OUTLIER / Rauschen": 181,
+      "technikkritisch": 18,
+      "politisch-organisatorisch": 69,
+      "affektiv/resonanzbezogen": 9,
+      "psycho-sozial": 5,
+      "materialistisch": 10,
+      "materialistisch / technikkritisch": 0
+    },
+    {
+      "year": 2020,
+      "OUTLIER / Rauschen": 169,
+      "technikkritisch": 16,
+      "politisch-organisatorisch": 31,
+      "affektiv/resonanzbezogen": 21,
+      "psycho-sozial": 4,
+      "materialistisch": 13,
+      "materialistisch / technikkritisch": 0
+    },
+    {
+      "year": 2021,
+      "OUTLIER / Rauschen": 116,
+      "technikkritisch": 19,
+      "politisch-organisatorisch": 21,
+      "affektiv/resonanzbezogen": 3,
+      "psycho-sozial": 4,
+      "materialistisch": 3,
+      "materialistisch / technikkritisch": 3
+    },
+    {
+      "year": 2022,
+      "OUTLIER / Rauschen": 59,
+      "technikkritisch": 6,
+      "politisch-organisatorisch": 19,
+      "affektiv/resonanzbezogen": 5,
+      "psycho-sozial": 0,
+      "materialistisch": 0,
+      "materialistisch / technikkritisch": 3
+    },
+    {
+      "year": 2023,
+      "OUTLIER / Rauschen": 35,
+      "technikkritisch": 7,
+      "politisch-organisatorisch": 1,
+      "affektiv/resonanzbezogen": 2,
+      "psycho-sozial": 1,
+      "materialistisch": 2,
+      "materialistisch / technikkritisch": 1
+    },
+    {
+      "year": 2024,
+      "OUTLIER / Rauschen": 41,
+      "technikkritisch": 7,
+      "politisch-organisatorisch": 8,
+      "affektiv/resonanzbezogen": 0,
+      "psycho-sozial": 0,
+      "materialistisch": 1,
+      "materialistisch / technikkritisch": 1
+    },
+    {
+      "year": 2025,
+      "OUTLIER / Rauschen": 76,
+      "technikkritisch": 14,
+      "politisch-organisatorisch": 7,
+      "affektiv/resonanzbezogen": 0,
+      "psycho-sozial": 2,
+      "materialistisch": 3,
+      "materialistisch / technikkritisch": 3
+    },
+    {
+      "year": 2026,
+      "OUTLIER / Rauschen": 14,
+      "technikkritisch": 1,
+      "politisch-organisatorisch": 2,
+      "affektiv/resonanzbezogen": 0,
+      "psycho-sozial": 0,
+      "materialistisch": 5,
+      "materialistisch / technikkritisch": 0
+    }
+  ],
+  "colorMap": {
+    "technikkritisch": "#EF4444",
+    "politisch-organisatorisch": "#3B82F6",
+    "affektiv/resonanzbezogen": "#F59E0B",
+    "psycho-sozial": "#10B981",
+    "materialistisch": "#8B5CF6",
+    "materialistisch / technikkritisch": "#DC2626",
+    "OUTLIER / Rauschen": "#9CA3AF",
+    "biografisch / allt\u00e4glich": "#6B7280"
+  }
+}
