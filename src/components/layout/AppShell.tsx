@@ -18,6 +18,7 @@ const navLinks = [
   { href: '/cron', label: 'Cron' },
   { href: '/kubernetes', label: '☸ K8s Lab' },
   { href: '/memory', label: 'Memory' },
+  { href: '/facebook', label: '📘 Facebook Corpus' },
 ]
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
