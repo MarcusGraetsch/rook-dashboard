@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Activity, Cpu, HardDrive, Clock, Users, Zap, RefreshCw, Terminal, Database, Shield } from 'lucide-react'
+import { Activity, Cpu, HardDrive, Clock, Users, Zap, RefreshCw, Terminal, Database, Shield, Inbox, Archive, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import KpiCard from '@/components/dashboard/KpiCard'
 import DateRangePicker, { DateRange } from '@/components/dashboard/DateRangePicker'
@@ -67,6 +67,35 @@ interface RuntimeBackupStatus {
   }>
 }
 
+interface EventQueueSummary {
+  file_count: number
+  total_bytes: number
+  latest_file: string | null
+  latest_mtime: string | null
+}
+
+interface EventLedgerStatus {
+  ok: boolean
+  checked_at: string
+  queues: {
+    inbox: EventQueueSummary
+    outbox: EventQueueSummary
+    archive: EventQueueSummary
+    'dead-letter': EventQueueSummary
+  }
+  totals: {
+    pending: number
+    archived: number
+    dead_lettered: number
+  }
+  recent_dead_letters: Array<{
+    path: string
+    name: string
+    mtime: string
+    size: number
+  }>
+}
+
 export default function Dashboard() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
@@ -76,6 +105,7 @@ export default function Dashboard() {
   const [gatewayError, setGatewayError] = useState(false)
   const [activities, setActivities] = useState<Activity[]>([])
   const [backupStatus, setBackupStatus] = useState<RuntimeBackupStatus | null>(null)
+  const [eventLedger, setEventLedger] = useState<EventLedgerStatus | null>(null)
   const [dateRange, setDateRange] = useState<DateRange>({
     from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
     to: new Date()
@@ -92,10 +122,11 @@ export default function Dashboard() {
         const queryString = params.toString();
         const sessionsUrl = queryString ? `/api/gateway/sessions?${queryString}` : '/api/gateway/sessions';
         
-        const [sessionsRes, statsRes, backupRes] = await Promise.all([
+        const [sessionsRes, statsRes, backupRes, eventsRes] = await Promise.all([
           fetch(sessionsUrl),
           fetch('/api/gateway/stats'),
           fetch('/api/control/backup'),
+          fetch('/api/control/events'),
         ])
         
         if (sessionsRes.ok) {
@@ -126,6 +157,11 @@ export default function Dashboard() {
           const backupJson = await backupRes.json()
           setBackupStatus(backupJson.backup || null)
         }
+
+        if (eventsRes.ok) {
+          const eventsJson = await eventsRes.json()
+          setEventLedger(eventsJson.events || null)
+        }
       } catch (e) {
         console.error('Failed to fetch data:', e)
         setGatewayError(true)
@@ -147,6 +183,8 @@ export default function Dashboard() {
     latestBackup?.includes_dashboard_db &&
     latestBackup?.includes_task_archive &&
     latestBackup?.includes_runtime_archive
+  const pendingEvents = eventLedger?.totals.pending ?? 0
+  const deadLetteredEvents = eventLedger?.totals.dead_lettered ?? 0
 
   return (
     <div className="space-y-4 lg:space-y-6">
@@ -218,6 +256,69 @@ export default function Dashboard() {
           icon={<HardDrive className="w-5 h-5" />}
           live={true}
         />
+      </div>
+
+      <div className="bg-secondary p-4 lg:p-6 rounded-lg border border-gray-700">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <h3 className="text-lg font-bold flex items-center gap-2">
+            <Inbox className="w-5 h-5 text-highlight" />
+            Event Ledger
+          </h3>
+          <span className={`text-xs px-2 py-1 rounded w-fit ${
+            deadLetteredEvents > 0 ? 'bg-red-900/50 text-red-300' : 'bg-green-900/50 text-green-300'
+          }`}>
+            {deadLetteredEvents > 0 ? 'Review required' : 'Healthy'}
+          </span>
+        </div>
+
+        {!eventLedger ? (
+          <p className="text-gray-400 text-sm">Event ledger status unavailable.</p>
+        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="rounded-lg border border-gray-700 p-3 bg-accent/20">
+              <div className="flex items-center gap-2 text-gray-400 text-sm">
+                <Inbox className="w-4 h-4" />
+                Pending
+              </div>
+              <p className="mt-2 text-2xl font-bold text-highlight">{pendingEvents}</p>
+              <p className="text-xs text-gray-500">
+                inbox {eventLedger.queues.inbox.file_count} / outbox {eventLedger.queues.outbox.file_count}
+              </p>
+            </div>
+            <div className="rounded-lg border border-gray-700 p-3 bg-accent/20">
+              <div className="flex items-center gap-2 text-gray-400 text-sm">
+                <Archive className="w-4 h-4" />
+                Archived
+              </div>
+              <p className="mt-2 text-2xl font-bold">{eventLedger.totals.archived}</p>
+              <p className="text-xs text-gray-500 truncate">
+                {eventLedger.queues.archive.latest_mtime || 'No archived events'}
+              </p>
+            </div>
+            <div className="rounded-lg border border-gray-700 p-3 bg-accent/20">
+              <div className="flex items-center gap-2 text-gray-400 text-sm">
+                <AlertTriangle className="w-4 h-4" />
+                Dead Letter
+              </div>
+              <p className={`mt-2 text-2xl font-bold ${deadLetteredEvents > 0 ? 'text-red-300' : ''}`}>
+                {deadLetteredEvents}
+              </p>
+              <p className="text-xs text-gray-500 truncate">
+                {eventLedger.queues['dead-letter'].latest_mtime || 'No dead letters'}
+              </p>
+            </div>
+            <div className="rounded-lg border border-gray-700 p-3 bg-accent/20">
+              <div className="flex items-center gap-2 text-gray-400 text-sm">
+                <Clock className="w-4 h-4" />
+                Checked
+              </div>
+              <p className="mt-2 text-sm font-medium">
+                {new Date(eventLedger.checked_at).toLocaleString('de-DE')}
+              </p>
+              <p className="text-xs text-gray-500">30s refresh</p>
+            </div>
+          </div>
+        )}
       </div>
       
       {/* Main Content Grid */}
