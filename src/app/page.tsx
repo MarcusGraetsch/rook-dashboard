@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Activity, Cpu, HardDrive, Clock, Users, Zap, RefreshCw, Terminal, Database, Shield, Inbox, Archive, AlertTriangle } from 'lucide-react'
+import { Activity, Cpu, HardDrive, Clock, Users, Zap, RefreshCw, Terminal, Database, Shield, Inbox, Archive, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import KpiCard from '@/components/dashboard/KpiCard'
 import DateRangePicker, { DateRange } from '@/components/dashboard/DateRangePicker'
@@ -82,11 +82,13 @@ interface EventLedgerStatus {
     outbox: EventQueueSummary
     archive: EventQueueSummary
     'dead-letter': EventQueueSummary
+    receipts: EventQueueSummary
   }
   totals: {
     pending: number
     archived: number
     dead_lettered: number
+    receipts: number
   }
   recent_dead_letters: Array<{
     path: string
@@ -274,7 +276,7 @@ export default function Dashboard() {
         {!eventLedger ? (
           <p className="text-gray-400 text-sm">Event ledger status unavailable.</p>
         ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <div className="rounded-lg border border-gray-700 p-3 bg-accent/20">
               <div className="flex items-center gap-2 text-gray-400 text-sm">
                 <Inbox className="w-4 h-4" />
@@ -305,6 +307,16 @@ export default function Dashboard() {
               </p>
               <p className="text-xs text-gray-500 truncate">
                 {eventLedger.queues['dead-letter'].latest_mtime || 'No dead letters'}
+              </p>
+            </div>
+            <div className="rounded-lg border border-gray-700 p-3 bg-accent/20">
+              <div className="flex items-center gap-2 text-gray-400 text-sm">
+                <CheckCircle2 className="w-4 h-4" />
+                Receipts
+              </div>
+              <p className="mt-2 text-2xl font-bold">{eventLedger.totals.receipts}</p>
+              <p className="text-xs text-gray-500 truncate">
+                {eventLedger.queues.receipts.latest_mtime || 'No receipts'}
               </p>
             </div>
             <div className="rounded-lg border border-gray-700 p-3 bg-accent/20">
