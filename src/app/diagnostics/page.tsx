@@ -352,6 +352,9 @@ export default function DiagnosticsPage() {
     )
   }
 
+  const deadLetteredEvents = eventLedger?.totals.dead_lettered || 0
+  const latestDeadLetter = eventLedger?.recent_dead_letters[0] || null
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -379,6 +382,27 @@ export default function DiagnosticsPage() {
           Refresh
         </button>
       </div>
+
+      {deadLetteredEvents > 0 && (
+        <div className="rounded-lg border border-red-700 bg-red-950/40 p-4">
+          <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
+            <div>
+              <p className="font-medium text-red-200">Event ledger dead-letter review required</p>
+              <p className="text-sm text-red-100/80 mt-1">
+                {deadLetteredEvents} dead-letter event{deadLetteredEvents === 1 ? '' : 's'} recorded. Keep dispatcher timer changes paused until the source is fixed.
+              </p>
+              {latestDeadLetter ? (
+                <p className="text-xs text-red-100/70 mt-2 break-words">
+                  Latest: {latestDeadLetter.reason || 'No reason recorded.'}
+                </p>
+              ) : null}
+            </div>
+            <span className="px-2 py-1 rounded text-xs bg-red-900/50 text-red-200 w-fit">
+              dead-letter={deadLetteredEvents}
+            </span>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-4">
         <div className="bg-secondary p-4 rounded-lg border border-gray-700">

@@ -92,9 +92,12 @@ interface EventLedgerStatus {
   }
   recent_dead_letters: Array<{
     path: string
-    name: string
+    failed_at: string | null
+    reason: string | null
+    event_id: string | null
+    idempotency_key: string | null
+    source_file: string | null
     mtime: string
-    size: number
   }>
 }
 
@@ -229,6 +232,23 @@ export default function Dashboard() {
           >
             <RefreshCw className="w-4 h-4" />
           </button>
+        </div>
+      )}
+
+      {deadLetteredEvents > 0 && (
+        <div className="bg-red-950/40 border border-red-700 p-4 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-300 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="font-medium text-red-200">Event ledger requires review</p>
+              <p className="text-sm text-red-100/80">
+                {deadLetteredEvents} dead-letter event{deadLetteredEvents === 1 ? '' : 's'} recorded. Dispatch automation should stay paused until reviewed.
+              </p>
+            </div>
+          </div>
+          <Link href="/diagnostics" className="text-sm text-red-100 hover:text-white underline underline-offset-4">
+            Open diagnostics
+          </Link>
         </div>
       )}
       
