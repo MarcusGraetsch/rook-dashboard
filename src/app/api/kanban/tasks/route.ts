@@ -11,6 +11,8 @@ import { randomUUID } from 'crypto';
 import { spawn } from 'child_process';
 const DISPATCH_WRAPPER =
   process.env.ROOK_DISPATCH_WRAPPER || '/root/.openclaw/workspace/operations/bin/dispatch-canonical-task.mjs';
+const EMIT_TASK_EVENT_SCRIPT =
+  process.env.ROOK_EMIT_TASK_EVENT_SCRIPT || '/root/.openclaw/workspace/operations/bin/emit-task-event.mjs';
 const AUTO_DISPATCH_READY = process.env.ROOK_AUTO_DISPATCH_READY !== '0';
 
 function generateId() {
@@ -39,6 +41,16 @@ type DispatchAttempt = {
   status?: string | null;
   claimed_by?: string | null;
   assigned_agent?: string | null;
+  reason?: string | null;
+  stdout?: string | null;
+  stderr?: string | null;
+};
+
+type EventEmissionAttempt = {
+  triggered: boolean;
+  ok: boolean;
+  event_id?: string | null;
+  target?: string | null;
   reason?: string | null;
   stdout?: string | null;
   stderr?: string | null;
@@ -81,6 +93,115 @@ async function autoDispatchReadyTask(canonicalTaskId: string): Promise<DispatchA
       stderr: null,
     };
   }
+}
+
+function columnNameToStatus(columnName: string | null | undefined) {
+  const normalized = normalizeName(String(columnName || ''));
+  const match = Object.entries(STATUS_TO_COLUMN).find(([, name]) => normalizeName(name) === normalized);
+  return match?.[0] || null;
+}
+
+async function emitKanbanTransitionEvent(args: {
+  canonicalTaskId: string;
+  statusBefore: string | null;
+  statusAfter: string | null;
+}): Promise<EventEmissionAttempt> {
+  const statusBefore = args.statusBefore;
+  const statusAfter = args.statusAfter;
+
+  if (!statusBefore || !statusAfter || statusBefore === statusAfter) {
+    return { triggered: false, ok: true, reason: 'no_status_transition' };
+  }
+
+  return new Promise((resolve) => {
+    const child = spawn(
+      'node',
+      [
+        EMIT_TASK_EVENT_SCRIPT,
+        '--task-id',
+        args.canonicalTaskId,
+        '--status-before',
+        statusBefore,
+        '--status-after',
+        statusAfter,
+        '--target',
+        'rook',
+        '--event-type',
+        'task_state.changed',
+        '--classification',
+        'ops-internal',
+        '--summary',
+        `Kanban task moved from ${statusBefore} to ${statusAfter}.`,
+      ],
+      {
+        cwd: '/root/.openclaw/workspace',
+        env: process.env,
+      },
+    );
+
+    let stdout = '';
+    let stderr = '';
+    const timeout = setTimeout(() => {
+      child.kill('SIGTERM');
+      resolve({
+        triggered: true,
+        ok: false,
+        reason: 'emit_task_event_timeout',
+        stdout,
+        stderr,
+      });
+    }, 15_000);
+
+    child.stdout?.on('data', (chunk: Buffer) => {
+      stdout += String(chunk);
+    });
+    child.stderr?.on('data', (chunk: Buffer) => {
+      stderr += String(chunk);
+    });
+    child.on('error', (error: Error) => {
+      clearTimeout(timeout);
+      resolve({
+        triggered: true,
+        ok: false,
+        reason: error.message,
+        stdout,
+        stderr,
+      });
+    });
+    child.on('close', (code: number | null) => {
+      clearTimeout(timeout);
+      if ((code ?? 1) !== 0) {
+        resolve({
+          triggered: true,
+          ok: false,
+          reason: stderr.trim() || `emit_task_event exited with ${code}`,
+          stdout,
+          stderr,
+        });
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(stdout || '{}');
+        resolve({
+          triggered: true,
+          ok: true,
+          event_id: parsed?.event?.event_id || null,
+          target: parsed?.target || null,
+          stdout,
+          stderr,
+        });
+      } catch (error: any) {
+        resolve({
+          triggered: true,
+          ok: false,
+          reason: error?.message || 'emit_task_event_parse_failed',
+          stdout,
+          stderr,
+        });
+      }
+    });
+  });
 }
 
 function getColumnRecord(db: ReturnType<typeof getDb>, columnId: string) {
@@ -483,12 +604,17 @@ export async function POST(request: NextRequest) {
       normalizeName(targetColumn.name) === 'ready'
         ? await autoDispatchReadyTask(sync.canonicalTaskId)
         : null;
+    const eventEmission = await emitKanbanTransitionEvent({
+      canonicalTaskId: sync.canonicalTaskId,
+      statusBefore: null,
+      statusAfter: columnNameToStatus(targetColumn.name),
+    });
     const task = attachChecklist(
       db,
       db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as Task | undefined
     );
 
-    return NextResponse.json({ ...(task || {}), sync, dispatch }, { status: 201 });
+    return NextResponse.json({ ...(task || {}), sync, dispatch, event_emission: eventEmission }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -697,12 +823,17 @@ export async function PUT(request: NextRequest) {
       normalizeName(currentTask.column_name) !== 'ready'
       && normalizeName(targetColumn.name) === 'ready';
     const dispatch = movedIntoReady ? await autoDispatchReadyTask(sync.canonicalTaskId) : null;
+    const eventEmission = await emitKanbanTransitionEvent({
+      canonicalTaskId: sync.canonicalTaskId,
+      statusBefore: columnNameToStatus(currentTask.column_name),
+      statusAfter: columnNameToStatus(targetColumn.name),
+    });
     const task = attachChecklist(
       db,
       db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as Task | undefined
     );
 
-    return NextResponse.json({ ...(task || {}), sync, dispatch });
+    return NextResponse.json({ ...(task || {}), sync, dispatch, event_emission: eventEmission });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
