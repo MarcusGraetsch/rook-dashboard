@@ -128,6 +128,49 @@ interface DiagnosticsPayload {
   }>
 }
 
+interface EventQueueSummary {
+  file_count: number
+  total_bytes: number
+  latest_file: string | null
+  latest_mtime: string | null
+}
+
+interface EventLedgerPayload {
+  ok: boolean
+  checked_at: string
+  queues: {
+    inbox: EventQueueSummary
+    outbox: EventQueueSummary
+    archive: EventQueueSummary
+    'dead-letter': EventQueueSummary
+    receipts: EventQueueSummary
+  }
+  totals: {
+    pending: number
+    archived: number
+    dead_lettered: number
+    receipts: number
+  }
+  recent_dead_letters: Array<{
+    path: string
+    failed_at: string | null
+    reason: string | null
+    event_id: string | null
+    idempotency_key: string | null
+    source_file: string | null
+    mtime: string
+  }>
+  recent_receipts: Array<{
+    path: string
+    receipt_id: string | null
+    event_id: string | null
+    acknowledged_by: string | null
+    state: string | null
+    acknowledged_at: string | null
+    mtime: string
+  }>
+}
+
 const badgeClass = (ok: boolean) =>
   ok ? 'bg-green-900/40 text-green-300' : 'bg-red-900/40 text-red-300'
 
@@ -248,6 +291,7 @@ function quotaProbeBadgeClass(status?: 'available' | 'unavailable' | 'error') {
 
 export default function DiagnosticsPage() {
   const [data, setData] = useState<DiagnosticsPayload | null>(null)
+  const [eventLedger, setEventLedger] = useState<EventLedgerPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [nextRefreshAt, setNextRefreshAt] = useState<number | null>(null)
@@ -258,15 +302,23 @@ export default function DiagnosticsPage() {
       setRefreshing(true)
     }
     try {
-      const res = await fetch('/api/control/diagnostics')
-      const json = await res.json()
+      const [diagnosticsRes, eventsRes] = await Promise.all([
+        fetch('/api/control/diagnostics'),
+        fetch('/api/control/events'),
+      ])
+      const json = await diagnosticsRes.json()
       setData(json)
+      if (eventsRes.ok) {
+        const eventsJson = await eventsRes.json()
+        setEventLedger(eventsJson.events || null)
+      }
       setNextRefreshAt(Date.now() + AUTO_REFRESH_MS)
     } catch (error: any) {
       setData({
         status: 'error',
         message: error?.message || 'Failed to load diagnostics.',
       })
+      setEventLedger(null)
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -383,6 +435,97 @@ export default function DiagnosticsPage() {
         <div className="bg-secondary p-4 rounded-lg border border-gray-700">
           <p className="text-sm text-gray-400">Done Findings</p>
           <p className="text-2xl font-bold">{data.summary?.reconciliation_findings || 0}</p>
+        </div>
+      </div>
+
+      <div className="bg-secondary p-5 rounded-lg border border-gray-700 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold">Event Ledger</h3>
+            <p className="text-sm text-gray-400 mt-1">
+              Recent immutable receipts and dead letters from the Rook/Hermes event bridge.
+            </p>
+            <p className="text-xs text-gray-500 mt-2">
+              Checked {formatTimestamp(eventLedger?.checked_at)}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-sm">
+            <div className="rounded border border-gray-700 p-3">
+              <p className="text-gray-400 text-xs">Pending</p>
+              <p className="text-xl font-semibold">{eventLedger?.totals.pending ?? '—'}</p>
+            </div>
+            <div className="rounded border border-gray-700 p-3">
+              <p className="text-gray-400 text-xs">Archived</p>
+              <p className="text-xl font-semibold">{eventLedger?.totals.archived ?? '—'}</p>
+            </div>
+            <div className="rounded border border-gray-700 p-3">
+              <p className="text-gray-400 text-xs">Receipts</p>
+              <p className="text-xl font-semibold">{eventLedger?.totals.receipts ?? '—'}</p>
+            </div>
+            <div className="rounded border border-gray-700 p-3">
+              <p className="text-gray-400 text-xs">Dead</p>
+              <p className={`text-xl font-semibold ${(eventLedger?.totals.dead_lettered || 0) > 0 ? 'text-red-300' : ''}`}>
+                {eventLedger?.totals.dead_lettered ?? '—'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div className="rounded border border-gray-700 p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <h4 className="font-medium">Recent Receipts</h4>
+              <span className="text-xs text-gray-500">{eventLedger?.recent_receipts.length || 0} shown</span>
+            </div>
+            {(eventLedger?.recent_receipts || []).length ? (
+              <div className="space-y-3">
+                {(eventLedger?.recent_receipts || []).map((receipt) => (
+                  <div key={receipt.path} className="rounded border border-gray-800 p-3 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-mono text-xs text-gray-300 truncate">{receipt.event_id || receipt.receipt_id || 'unknown'}</p>
+                      <span className="px-2 py-1 rounded text-xs bg-green-900/40 text-green-300">
+                        {receipt.state || 'unknown'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">
+                      {receipt.acknowledged_by || 'unknown'} at {formatTimestamp(receipt.acknowledged_at || receipt.mtime)}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1 break-all">{receipt.path}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">No receipts recorded yet.</p>
+            )}
+          </div>
+
+          <div className="rounded border border-gray-700 p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <h4 className="font-medium">Recent Dead Letters</h4>
+              <span className="text-xs text-gray-500">{eventLedger?.recent_dead_letters.length || 0} shown</span>
+            </div>
+            {(eventLedger?.recent_dead_letters || []).length ? (
+              <div className="space-y-3">
+                {(eventLedger?.recent_dead_letters || []).map((deadLetter) => (
+                  <div key={deadLetter.path} className="rounded border border-red-900/50 bg-red-950/10 p-3 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-mono text-xs text-gray-300 truncate">{deadLetter.event_id || 'unknown event'}</p>
+                      <span className="px-2 py-1 rounded text-xs bg-red-900/40 text-red-300">
+                        dead-letter
+                      </span>
+                    </div>
+                    <p className="text-xs text-red-200 mt-2 break-words">{deadLetter.reason || 'No reason recorded.'}</p>
+                    <p className="text-xs text-gray-400 mt-2">
+                      Failed {formatTimestamp(deadLetter.failed_at || deadLetter.mtime)}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1 break-all">{deadLetter.path}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-green-300">No dead letters recorded.</p>
+            )}
+          </div>
         </div>
       </div>
 
