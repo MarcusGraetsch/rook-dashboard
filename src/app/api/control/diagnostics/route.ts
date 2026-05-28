@@ -61,9 +61,9 @@ function reconciliationStatus(task: {
   return 'needs-reconciliation'
 }
 
-function runNodeJson(scriptPath: string): Promise<any> {
+function runNodeJson(scriptPath: string, args: string[] = []): Promise<any> {
   return new Promise((resolve, reject) => {
-    const child = spawn('node', [scriptPath], {
+    const child = spawn('node', [scriptPath, ...args], {
       cwd: '/root/.openclaw/workspace',
       stdio: ['ignore', 'pipe', 'pipe'],
     })
@@ -91,9 +91,9 @@ function runNodeJson(scriptPath: string): Promise<any> {
   })
 }
 
-async function runNodeJsonCheck(scriptPath: string): Promise<any | DiagnosticsCheckError> {
+async function runNodeJsonCheck(scriptPath: string, args: string[] = []): Promise<any | DiagnosticsCheckError> {
   try {
-    return await runNodeJson(scriptPath)
+    return await runNodeJson(scriptPath, args)
   } catch (error: any) {
     return {
       ok: false,
@@ -278,10 +278,11 @@ function remediationForFinding(finding: ControlPlaneFinding): FindingRemediation
 
 export async function GET() {
   try {
-    const [contract, controlPlane, integrity, reconciliation, backupIntegrity, runtimeSmokeRaw, tasks, dashboardServiceRaw, kanbanIntegrity, providerProbe] = await Promise.all([
+    const [contract, controlPlane, integrity, archiveCleanupPlan, reconciliation, backupIntegrity, runtimeSmokeRaw, tasks, dashboardServiceRaw, kanbanIntegrity, providerProbe] = await Promise.all([
       runNodeJsonCheck('/root/.openclaw/workspace/operations/bin/check-openclaw-contract.mjs'),
       runNodeJsonCheck(RUNTIME_CONTROL_PLANE_SCRIPT),
       runNodeJsonCheck('/root/.openclaw/workspace/operations/bin/check-canonical-task-integrity.mjs'),
+      runNodeJsonCheck('/root/.openclaw/workspace/operations/bin/plan-archive-task-cleanup.mjs'),
       runNodeJsonCheck('/root/.openclaw/workspace/operations/bin/reconcile-done-code-tasks.mjs'),
       runNodeJsonCheck('/root/.openclaw/workspace/operations/bin/check-runtime-backup-integrity.mjs'),
       fs.readFile(RUNTIME_SMOKE_PATH, 'utf8').catch(() => '{}'),
@@ -353,6 +354,7 @@ export async function GET() {
       contract,
       control_plane: controlPlaneWithRemediation,
       integrity,
+      archive_cleanup_plan: archiveCleanupPlan,
       reconciliation,
       backup_integrity: backupIntegrity,
       runtime_smoke: runtimeSmoke,
@@ -370,6 +372,7 @@ export async function GET() {
         integrity_ok: Boolean(integrity?.ok),
         integrity_warnings: Number(integrity?.warnings?.active_archive_duplicate_task_ids?.length || 0)
           + Number(integrity?.warnings?.archive_mismatches?.length || 0),
+        archive_cleanup_actions: Number(archiveCleanupPlan?.action_count || 0),
         backup_integrity_ok: Boolean(backupIntegrity?.ok),
         runtime_smoke_ok: Boolean(runtimeSmoke?.ok),
         dashboard_service_ok: dashboardService.active_state === 'active' && dashboardService.sub_state === 'running',

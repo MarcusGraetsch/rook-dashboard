@@ -32,6 +32,7 @@ interface DiagnosticsPayload {
     control_plane_review_overdue: number
     integrity_ok: boolean
     integrity_warnings: number
+    archive_cleanup_actions: number
     backup_integrity_ok: boolean
     runtime_smoke_ok: boolean
     dashboard_service_ok: boolean
@@ -77,6 +78,26 @@ interface DiagnosticsPayload {
     }
     active_task_file_count?: number
     archived_task_file_count?: number
+  }
+  archive_cleanup_plan?: {
+    ok: boolean
+    status?: 'error'
+    message?: string
+    mode?: string
+    action_count?: number
+    quarantine_root?: string
+    actions?: Array<{
+      action: string
+      task_id?: string
+      project_id?: string
+      reason: string
+      dry_run: boolean
+      source_file: string
+      proposed_target_file?: string
+      proposed_canonical_filename?: string
+      risk: 'low' | 'medium' | 'high'
+      operator_note: string
+    }>
   }
   reconciliation?: {
     ok?: boolean
@@ -901,6 +922,44 @@ export default function DiagnosticsPage() {
                   ))}
                 </div>
               )}
+              {data.archive_cleanup_plan?.status === 'error' ? (
+                <div className="rounded border border-red-900/50 bg-red-950/20 p-3">
+                  <p className="text-red-300 font-medium">Archive cleanup plan failed.</p>
+                  <p className="text-red-200 text-xs break-all mt-1">{data.archive_cleanup_plan.message}</p>
+                </div>
+              ) : (data.archive_cleanup_plan?.action_count || 0) > 0 ? (
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-amber-200">Dry-run cleanup plan</p>
+                      <p className="text-xs text-gray-500 font-mono break-all mt-1">
+                        {data.archive_cleanup_plan?.quarantine_root}
+                      </p>
+                    </div>
+                    <span className="px-2 py-1 rounded bg-amber-900/40 text-amber-200 text-xs">
+                      {data.summary?.archive_cleanup_actions || 0} actions
+                    </span>
+                  </div>
+                  {(data.archive_cleanup_plan?.actions || []).slice(0, 7).map((action) => (
+                    <div key={`${action.action}:${action.source_file}`} className="rounded border border-gray-700 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium">{action.task_id || action.action}</p>
+                          <p className="text-xs text-gray-400 mt-1">{action.reason}</p>
+                        </div>
+                        <span className="px-2 py-1 rounded bg-slate-800 text-slate-200 text-xs">
+                          {action.risk}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 font-mono break-all mt-2">{action.source_file}</p>
+                      <p className="text-xs text-gray-500 font-mono break-all mt-1">
+                        {action.proposed_target_file || action.proposed_canonical_filename || 'review only'}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-2">{action.operator_note}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="space-y-2 text-sm">
