@@ -31,6 +31,7 @@ interface DiagnosticsPayload {
     control_plane_review_due_soon: number
     control_plane_review_overdue: number
     integrity_ok: boolean
+    integrity_warnings: number
     backup_integrity_ok: boolean
     runtime_smoke_ok: boolean
     dashboard_service_ok: boolean
@@ -68,8 +69,14 @@ interface DiagnosticsPayload {
     ok: boolean
     status?: 'error'
     message?: string
-    duplicates: Array<{ task_id: string; files: string[] }>
-    mismatches: Array<{ file: string; problem: string }>
+    duplicates: Array<{ task_id: string; files: Array<string | { scope: string; file: string }> }>
+    mismatches: Array<{ scope?: string; file: string; problem: string }>
+    warnings?: {
+      active_archive_duplicate_task_ids?: Array<{ task_id: string; files: Array<{ scope: string; file: string }> }>
+      archive_mismatches?: Array<{ scope?: string; file: string; problem: string }>
+    }
+    active_task_file_count?: number
+    archived_task_file_count?: number
   }
   reconciliation?: {
     ok?: boolean
@@ -197,6 +204,14 @@ function formatTimestamp(value?: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleString()
+}
+
+function integrityFileLabel(file: string | { scope?: string; file: string }) {
+  if (typeof file === 'string') {
+    return file
+  }
+
+  return `${file.scope || 'unknown'}: ${file.file}`
 }
 
 function reviewStatus(reviewAfter?: string) {
@@ -436,6 +451,9 @@ export default function DiagnosticsPage() {
           <p className="text-sm text-gray-400">Integrity</p>
           <p className={`inline-block mt-2 px-2 py-1 rounded text-xs ${badgeClass(Boolean(data.summary?.integrity_ok))}`}>
             {data.summary?.integrity_ok ? 'ok' : 'error'}
+          </p>
+          <p className="text-xs text-gray-500 mt-2">
+            {data.summary?.integrity_warnings || 0} archive warnings
           </p>
         </div>
         <div className="bg-secondary p-4 rounded-lg border border-gray-700">
@@ -847,14 +865,50 @@ export default function DiagnosticsPage() {
               </pre>
             </div>
           ) : data.integrity?.ok ? (
-            <p className="text-green-300 text-sm">No duplicate task ids or path mismatches detected.</p>
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-3 text-sm">
+                <div className="rounded border border-gray-700 p-3">
+                  <p className="text-gray-500">Active tasks</p>
+                  <p className="text-lg font-semibold">{data.integrity.active_task_file_count || 0}</p>
+                </div>
+                <div className="rounded border border-gray-700 p-3">
+                  <p className="text-gray-500">Archived tasks</p>
+                  <p className="text-lg font-semibold">{data.integrity.archived_task_file_count || 0}</p>
+                </div>
+                <div className="rounded border border-gray-700 p-3">
+                  <p className="text-gray-500">Archive warnings</p>
+                  <p className="text-lg font-semibold">{data.summary?.integrity_warnings || 0}</p>
+                </div>
+              </div>
+              <p className="text-green-300 text-sm">Active canonical tasks have no duplicate ids or path mismatches.</p>
+              {(data.summary?.integrity_warnings || 0) > 0 && (
+                <div className="space-y-3">
+                  {(data.integrity.warnings?.active_archive_duplicate_task_ids || []).slice(0, 6).map((duplicate) => (
+                    <div key={duplicate.task_id} className="rounded border border-amber-900/50 bg-amber-950/20 p-3">
+                      <p className="text-amber-300 font-medium">{duplicate.task_id}</p>
+                      {(duplicate.files || []).map((file) => (
+                        <p key={`${file.scope}:${file.file}`} className="text-amber-100/80 font-mono break-all text-xs">
+                          {integrityFileLabel(file)}
+                        </p>
+                      ))}
+                    </div>
+                  ))}
+                  {(data.integrity.warnings?.archive_mismatches || []).slice(0, 6).map((mismatch) => (
+                    <div key={mismatch.file} className="rounded border border-amber-900/50 bg-amber-950/20 p-3">
+                      <p className="text-amber-300 font-medium">{mismatch.problem}</p>
+                      <p className="text-amber-100/80 font-mono break-all text-xs">{mismatch.file}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : (
             <div className="space-y-2 text-sm">
               {(data.integrity?.duplicates || []).map((duplicate) => (
                 <div key={duplicate.task_id} className="rounded border border-red-900/50 bg-red-950/20 p-3">
                   <p className="text-red-300 font-medium">{duplicate.task_id}</p>
                   {(duplicate.files || []).map((file) => (
-                    <p key={file} className="text-red-200 font-mono break-all">{file}</p>
+                    <p key={integrityFileLabel(file)} className="text-red-200 font-mono break-all">{integrityFileLabel(file)}</p>
                   ))}
                 </div>
               ))}

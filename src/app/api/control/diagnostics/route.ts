@@ -368,6 +368,8 @@ export async function GET() {
         control_plane_review_due_soon: controlPlaneReviewSummary.review_due_soon,
         control_plane_review_overdue: controlPlaneReviewSummary.review_overdue,
         integrity_ok: Boolean(integrity?.ok),
+        integrity_warnings: Number(integrity?.warnings?.active_archive_duplicate_task_ids?.length || 0)
+          + Number(integrity?.warnings?.archive_mismatches?.length || 0),
         backup_integrity_ok: Boolean(backupIntegrity?.ok),
         runtime_smoke_ok: Boolean(runtimeSmoke?.ok),
         dashboard_service_ok: dashboardService.active_state === 'active' && dashboardService.sub_state === 'running',
