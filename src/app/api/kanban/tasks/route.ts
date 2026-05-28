@@ -124,6 +124,8 @@ async function emitKanbanTransitionEvent(args: {
         statusBefore,
         '--status-after',
         statusAfter,
+        '--source',
+        'dashboard',
         '--target',
         'rook',
         '--event-type',
@@ -481,6 +483,7 @@ export async function POST(request: NextRequest) {
       checklist,
       target_status,
       plan,
+      skip_github_sync,
     } = await request.json();
     const id = generateId();
     
@@ -595,10 +598,12 @@ export async function POST(request: NextRequest) {
     await persistCanonicalMetadata(sync.canonicalTaskId, sync.projectId, {
       handoff_notes: handoff_notes !== undefined ? handoff_notes : undefined,
     });
-    try {
-      await autoSyncKanbanTaskToGithub(db, sync.canonicalTaskId);
-    } catch {
-      // Canonical task is already saved; GitHub sync errors are persisted separately.
+    if (!skip_github_sync) {
+      try {
+        await autoSyncKanbanTaskToGithub(db, sync.canonicalTaskId);
+      } catch {
+        // Canonical task is already saved; GitHub sync errors are persisted separately.
+      }
     }
     const dispatch =
       normalizeName(targetColumn.name) === 'ready'
@@ -644,6 +649,7 @@ export async function PUT(request: NextRequest) {
       checklist,
       target_status,
       plan,
+      skip_github_sync,
     } = await request.json();
 
     const db = getDb();
@@ -814,10 +820,12 @@ export async function PUT(request: NextRequest) {
     await persistCanonicalMetadata(sync.canonicalTaskId, sync.projectId, {
       handoff_notes: handoff_notes !== undefined ? handoff_notes : undefined,
     });
-    try {
-      await autoSyncKanbanTaskToGithub(db, sync.canonicalTaskId);
-    } catch {
-      // Canonical task is already saved; GitHub sync errors are persisted separately.
+    if (!skip_github_sync) {
+      try {
+        await autoSyncKanbanTaskToGithub(db, sync.canonicalTaskId);
+      } catch {
+        // Canonical task is already saved; GitHub sync errors are persisted separately.
+      }
     }
     const movedIntoReady =
       normalizeName(currentTask.column_name) !== 'ready'

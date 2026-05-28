@@ -338,19 +338,40 @@ async function readCanonicalTask(projectId: string, taskId: string): Promise<Can
 
 async function nextTaskId(projectId: string): Promise<string> {
   const prefix = PREFIX_BY_PROJECT[projectId] || safeSlug(projectId);
-  const projectDir = path.join(TASKS_DIR, projectId);
-  await ensureDir(projectDir);
+  const activeProjectDir = path.join(TASKS_DIR, projectId);
+  const archivedProjectDir = path.join(ARCHIVE_TASKS_DIR, projectId);
+  await ensureDir(activeProjectDir);
 
   let max = 0;
+  const taskFilePattern = new RegExp(`^${prefix}-(\\d{4,})\\.json$`);
+
+  for (const projectDir of [activeProjectDir, archivedProjectDir]) {
+    try {
+      const entries = await fs.readdir(projectDir);
+      for (const entry of entries) {
+        const match = entry.match(taskFilePattern);
+        if (!match) continue;
+        max = Math.max(max, Number(match[1]));
+      }
+    } catch {
+      // Ignore missing roots and continue with the highest known task id.
+    }
+  }
+
   try {
-    const entries = await fs.readdir(projectDir);
-    for (const entry of entries) {
-      const match = entry.match(new RegExp(`^${prefix}-(\\d{4,})\\.json$`));
-      if (!match) continue;
-      max = Math.max(max, Number(match[1]));
+    const entries = await fs.readdir(ARCHIVE_TASKS_DIR);
+    for (const archivedProjectId of entries) {
+      if (archivedProjectId === projectId) continue;
+      const archivedProjectDir = path.join(ARCHIVE_TASKS_DIR, archivedProjectId);
+      const archivedEntries = await fs.readdir(archivedProjectDir);
+      for (const entry of archivedEntries) {
+        const match = entry.match(taskFilePattern);
+        if (!match) continue;
+        max = Math.max(max, Number(match[1]));
+      }
     }
   } catch {
-    // Ignore and start from zero.
+    // Ignore unreadable archive roots.
   }
 
   return `${prefix}-${String(max + 1).padStart(4, '0')}`;
