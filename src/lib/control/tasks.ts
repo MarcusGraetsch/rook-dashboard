@@ -8,6 +8,7 @@ const RUNTIME_OPERATIONS_DIR =
   process.env.ROOK_RUNTIME_OPERATIONS_DIR || path.join(RUNTIME_ROOT, 'operations');
 const TASKS_DIR = path.join(OPERATIONS_DIR, 'tasks');
 const ARCHIVE_TASKS_DIR = path.join(RUNTIME_OPERATIONS_DIR, 'archive', 'tasks');
+const WORKSPACE_ARCHIVE_TASKS_DIR = path.join(OPERATIONS_DIR, 'archive', 'tasks');
 const TASK_STATE_DIR = path.join(RUNTIME_OPERATIONS_DIR, 'task-state');
 
 export type TaskStatus =
@@ -256,6 +257,7 @@ async function getTaskFileCandidates(taskId: string, projectId?: string | null):
     const scopedCandidates = [
       path.join(TASKS_DIR, projectId, `${taskId}.json`),
       path.join(ARCHIVE_TASKS_DIR, projectId, `${taskId}.json`),
+      path.join(WORKSPACE_ARCHIVE_TASKS_DIR, projectId, `${taskId}.json`),
     ];
     const matches: string[] = [];
 
@@ -271,7 +273,7 @@ async function getTaskFileCandidates(taskId: string, projectId?: string | null):
     return matches;
   }
 
-  const roots = [TASKS_DIR, ARCHIVE_TASKS_DIR];
+  const roots = [TASKS_DIR, ARCHIVE_TASKS_DIR, WORKSPACE_ARCHIVE_TASKS_DIR];
   const matches: string[] = [];
 
   for (const root of roots) {

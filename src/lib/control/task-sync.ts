@@ -16,6 +16,7 @@ const RUNTIME_OPERATIONS_DIR =
   process.env.ROOK_RUNTIME_OPERATIONS_DIR || path.join(RUNTIME_ROOT, 'operations');
 const TASKS_DIR = path.join(OPERATIONS_DIR, 'tasks');
 const ARCHIVE_TASKS_DIR = path.join(RUNTIME_OPERATIONS_DIR, 'archive', 'tasks');
+const WORKSPACE_ARCHIVE_TASKS_DIR = path.join(OPERATIONS_DIR, 'archive', 'tasks');
 const PROJECTS_FILE = path.join(OPERATIONS_DIR, 'projects', 'projects.json');
 
 const PREFIX_BY_PROJECT: Record<string, string> = {
@@ -309,7 +310,7 @@ async function readCanonicalTask(projectId: string, taskId: string): Promise<Can
     return scoped;
   }
 
-  const taskRoots = [TASKS_DIR, ARCHIVE_TASKS_DIR];
+  const taskRoots = [TASKS_DIR, ARCHIVE_TASKS_DIR, WORKSPACE_ARCHIVE_TASKS_DIR];
   const matches: string[] = [];
 
   for (const root of taskRoots) {
@@ -340,12 +341,13 @@ async function nextTaskId(projectId: string): Promise<string> {
   const prefix = PREFIX_BY_PROJECT[projectId] || safeSlug(projectId);
   const activeProjectDir = path.join(TASKS_DIR, projectId);
   const archivedProjectDir = path.join(ARCHIVE_TASKS_DIR, projectId);
+  const workspaceArchivedProjectDir = path.join(WORKSPACE_ARCHIVE_TASKS_DIR, projectId);
   await ensureDir(activeProjectDir);
 
   let max = 0;
   const taskFilePattern = new RegExp(`^${prefix}-(\\d{4,})\\.json$`);
 
-  for (const projectDir of [activeProjectDir, archivedProjectDir]) {
+  for (const projectDir of [activeProjectDir, archivedProjectDir, workspaceArchivedProjectDir]) {
     try {
       const entries = await fs.readdir(projectDir);
       for (const entry of entries) {
@@ -359,15 +361,17 @@ async function nextTaskId(projectId: string): Promise<string> {
   }
 
   try {
-    const entries = await fs.readdir(ARCHIVE_TASKS_DIR);
-    for (const archivedProjectId of entries) {
-      if (archivedProjectId === projectId) continue;
-      const archivedProjectDir = path.join(ARCHIVE_TASKS_DIR, archivedProjectId);
-      const archivedEntries = await fs.readdir(archivedProjectDir);
-      for (const entry of archivedEntries) {
-        const match = entry.match(taskFilePattern);
-        if (!match) continue;
-        max = Math.max(max, Number(match[1]));
+    for (const archiveRoot of [ARCHIVE_TASKS_DIR, WORKSPACE_ARCHIVE_TASKS_DIR]) {
+      const entries = await fs.readdir(archiveRoot);
+      for (const archivedProjectId of entries) {
+        if (archivedProjectId === projectId) continue;
+        const archivedProjectDir = path.join(archiveRoot, archivedProjectId);
+        const archivedEntries = await fs.readdir(archivedProjectDir);
+        for (const entry of archivedEntries) {
+          const match = entry.match(taskFilePattern);
+          if (!match) continue;
+          max = Math.max(max, Number(match[1]));
+        }
       }
     }
   } catch {
