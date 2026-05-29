@@ -56,6 +56,15 @@ interface DiagnosticsPayload {
       severity: 'info' | 'warning' | 'error'
       type: string
       details: string
+      replay_findings?: Array<{
+        severity: 'warning' | 'error'
+        type: string
+        file?: string
+        event_id?: string | null
+        details?: string
+        archive_file?: string
+        receipt_event_file?: string
+      }>
       acknowledgment_reason?: string
       review_after?: string
       remediation?: {
@@ -438,6 +447,11 @@ export default function DiagnosticsPage() {
   const expiringSoonEvents = eventLedger?.pending.expiring_soon_count || 0
   const latestDeadLetter = eventLedger?.recent_dead_letters[0] || null
   const latestDispatch = eventLedger?.dispatcher.latest_run || null
+  const replayControlFindings = (data.control_plane?.findings || []).filter((finding) => (
+    finding.source === 'event_ledger'
+    && (finding.type === 'event_replay_integrity_failed' || finding.type === 'event_replay_integrity_warnings')
+  ))
+  const replayIssueCount = replayControlFindings.reduce((count, finding) => count + (finding.replay_findings?.length || 1), 0)
 
   return (
     <div className="space-y-6">
@@ -622,6 +636,61 @@ export default function DiagnosticsPage() {
               </p>
             </div>
           </div>
+        </div>
+
+        <div className={`rounded border p-4 text-sm ${replayControlFindings.length > 0 ? 'border-amber-800 bg-amber-950/10' : 'border-gray-700'}`}>
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+            <div>
+              <p className="font-medium">Replay Integrity</p>
+              <p className="text-xs text-gray-400 mt-1">
+                Archive and receipt replay state from the control-plane event-ledger gate.
+              </p>
+            </div>
+            <span className={`px-2 py-1 rounded text-xs w-fit ${replayControlFindings.length > 0 ? findingBadgeClass(replayControlFindings.some((finding) => finding.severity === 'error') ? 'error' : 'warning') : 'bg-green-900/40 text-green-300'}`}>
+              {replayControlFindings.length > 0 ? `${replayIssueCount} issue${replayIssueCount === 1 ? '' : 's'}` : 'ok'}
+            </span>
+          </div>
+          {replayControlFindings.length > 0 ? (
+            <div className="mt-4 space-y-3">
+              {replayControlFindings.map((finding) => (
+                <div key={finding.type} className="rounded border border-amber-900/40 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-mono text-xs text-gray-400">{finding.type}</p>
+                      <p className="text-sm text-gray-200 mt-1">{finding.details}</p>
+                    </div>
+                    <span className={`px-2 py-1 rounded text-xs ${findingBadgeClass(finding.severity)}`}>
+                      {finding.severity}
+                    </span>
+                  </div>
+                  {finding.replay_findings?.length ? (
+                    <div className="mt-3 space-y-2">
+                      {finding.replay_findings.map((replayFinding, index) => (
+                        <div key={`${replayFinding.type}:${index}`} className="rounded bg-slate-950/40 p-3 text-xs">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="font-mono text-gray-300">{replayFinding.type}</span>
+                            <span className={`px-2 py-1 rounded ${findingBadgeClass(replayFinding.severity)}`}>
+                              {replayFinding.severity}
+                            </span>
+                          </div>
+                          {replayFinding.event_id ? <p className="text-gray-400 mt-2 break-all">{replayFinding.event_id}</p> : null}
+                          {replayFinding.file ? <p className="text-gray-500 mt-1 break-all">{replayFinding.file}</p> : null}
+                          {replayFinding.receipt_event_file ? <p className="text-gray-500 mt-1 break-all">receipt: {replayFinding.receipt_event_file}</p> : null}
+                          {replayFinding.archive_file ? <p className="text-gray-500 mt-1 break-all">archive: {replayFinding.archive_file}</p> : null}
+                          {replayFinding.details ? <p className="text-amber-100/80 mt-2 break-words">{replayFinding.details}</p> : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {finding.remediation ? (
+                    <p className="text-xs text-amber-100/80 mt-3">{finding.remediation.operator_action}</p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-green-300 mt-3">Archived events and receipts replay cleanly.</p>
+          )}
         </div>
 
         {latestDispatch ? (
