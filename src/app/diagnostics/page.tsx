@@ -205,6 +205,25 @@ interface EventLedgerPayload {
       expires_in_hours: number | null
     }>
   }
+  dispatcher: {
+    runtime_dir: string
+    latest_run: {
+      run_id: string
+      started_at: string
+      finished_at: string
+      duration_ms: number | null
+      queue: string
+      dry_run: boolean
+      ok: boolean
+      checked: number
+      archived: number
+      dead_lettered: number
+      delivered: number
+      delivery_failures: number
+      last_error: string | null
+      path: string
+    } | null
+  }
   recent_dead_letters: Array<{
     path: string
     failed_at: string | null
@@ -418,6 +437,7 @@ export default function DiagnosticsPage() {
   const expiredPendingEvents = eventLedger?.pending.expired_count || 0
   const expiringSoonEvents = eventLedger?.pending.expiring_soon_count || 0
   const latestDeadLetter = eventLedger?.recent_dead_letters[0] || null
+  const latestDispatch = eventLedger?.dispatcher.latest_run || null
 
   return (
     <div className="space-y-6">
@@ -561,7 +581,7 @@ export default function DiagnosticsPage() {
               Checked {formatTimestamp(eventLedger?.checked_at)}
             </p>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-sm">
+          <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center text-sm">
             <div className="rounded border border-gray-700 p-3">
               <p className="text-gray-400 text-xs">Pending</p>
               <p className="text-xl font-semibold">{eventLedger?.totals.pending ?? '—'}</p>
@@ -592,8 +612,56 @@ export default function DiagnosticsPage() {
                 {expiredPendingEvents} expired
               </p>
             </div>
+            <div className="rounded border border-gray-700 p-3">
+              <p className="text-gray-400 text-xs">Dispatcher</p>
+              <p className={`text-xl font-semibold ${latestDispatch && !latestDispatch.ok ? 'text-red-300' : ''}`}>
+                {latestDispatch ? (latestDispatch.ok ? 'ok' : 'fail') : '—'}
+              </p>
+              <p className="text-[11px] text-gray-500 mt-1">
+                {latestDispatch ? `${latestDispatch.delivered} delivered` : 'no run'}
+              </p>
+            </div>
           </div>
         </div>
+
+        {latestDispatch ? (
+          <div className="rounded border border-gray-700 p-4 text-sm">
+            <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+              <div>
+                <p className="font-medium">Latest Dispatcher Run</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {latestDispatch.run_id} • {latestDispatch.queue} • {latestDispatch.dry_run ? 'dry run' : 'live'} • {formatTimestamp(latestDispatch.finished_at)}
+                </p>
+                {latestDispatch.last_error ? (
+                  <p className="text-xs text-red-200 mt-2 break-words">{latestDispatch.last_error}</p>
+                ) : null}
+                <p className="text-xs text-gray-500 mt-2 break-all">{latestDispatch.path}</p>
+              </div>
+              <div className="grid grid-cols-4 gap-2 text-center">
+                <div>
+                  <p className="text-xs text-gray-500">Checked</p>
+                  <p className="font-semibold">{latestDispatch.checked}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Archived</p>
+                  <p className="font-semibold">{latestDispatch.archived}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Dead</p>
+                  <p className="font-semibold">{latestDispatch.dead_lettered}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Failed</p>
+                  <p className="font-semibold">{latestDispatch.delivery_failures}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded border border-gray-700 p-4 text-sm text-gray-400">
+            No dispatcher run metadata recorded yet.
+          </div>
+        )}
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           <div className="rounded border border-gray-700 p-4 space-y-3">
