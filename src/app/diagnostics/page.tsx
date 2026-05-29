@@ -179,6 +179,32 @@ interface EventLedgerPayload {
     dead_lettered: number
     receipts: number
   }
+  pending: {
+    expired_count: number
+    expiring_soon_count: number
+    invalid_timing_count: number
+    oldest_pending_age_hours: number | null
+    oldest_pending_created_at: string | null
+    oldest_pending_file: string | null
+    next_expiry_at: string | null
+    next_expiry_file: string | null
+    expiring_soon: Array<{
+      path: string
+      queue: string
+      event_id: string | null
+      message_id: string | null
+      expires_at: string | null
+      expires_in_hours: number | null
+    }>
+    expired: Array<{
+      path: string
+      queue: string
+      event_id: string | null
+      message_id: string | null
+      expires_at: string | null
+      expires_in_hours: number | null
+    }>
+  }
   recent_dead_letters: Array<{
     path: string
     failed_at: string | null
@@ -389,6 +415,8 @@ export default function DiagnosticsPage() {
   }
 
   const deadLetteredEvents = eventLedger?.totals.dead_lettered || 0
+  const expiredPendingEvents = eventLedger?.pending.expired_count || 0
+  const expiringSoonEvents = eventLedger?.pending.expiring_soon_count || 0
   const latestDeadLetter = eventLedger?.recent_dead_letters[0] || null
 
   return (
@@ -435,6 +463,27 @@ export default function DiagnosticsPage() {
             </div>
             <span className="px-2 py-1 rounded text-xs bg-red-900/50 text-red-200 w-fit">
               dead-letter={deadLetteredEvents}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {(expiredPendingEvents > 0 || expiringSoonEvents > 0) && (
+        <div className="rounded-lg border border-amber-700 bg-amber-950/30 p-4">
+          <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
+            <div>
+              <p className="font-medium text-amber-200">Event ledger pending TTL review required</p>
+              <p className="text-sm text-amber-100/80 mt-1">
+                {expiredPendingEvents} expired pending event{expiredPendingEvents === 1 ? '' : 's'} and {expiringSoonEvents} expiring within 24 hours.
+              </p>
+              {eventLedger?.pending.oldest_pending_file ? (
+                <p className="text-xs text-amber-100/70 mt-2 break-words">
+                  Oldest pending: {eventLedger.pending.oldest_pending_age_hours}h at {eventLedger.pending.oldest_pending_file}
+                </p>
+              ) : null}
+            </div>
+            <span className="px-2 py-1 rounded text-xs bg-amber-900/50 text-amber-200 w-fit">
+              pending-ttl={expiredPendingEvents + expiringSoonEvents}
             </span>
           </div>
         </div>
@@ -512,10 +561,13 @@ export default function DiagnosticsPage() {
               Checked {formatTimestamp(eventLedger?.checked_at)}
             </p>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-sm">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-sm">
             <div className="rounded border border-gray-700 p-3">
               <p className="text-gray-400 text-xs">Pending</p>
               <p className="text-xl font-semibold">{eventLedger?.totals.pending ?? '—'}</p>
+              <p className="text-[11px] text-gray-500 mt-1">
+                {eventLedger?.pending.oldest_pending_age_hours ?? '—'}h oldest
+              </p>
             </div>
             <div className="rounded border border-gray-700 p-3">
               <p className="text-gray-400 text-xs">Archived</p>
@@ -529,6 +581,15 @@ export default function DiagnosticsPage() {
               <p className="text-gray-400 text-xs">Dead</p>
               <p className={`text-xl font-semibold ${(eventLedger?.totals.dead_lettered || 0) > 0 ? 'text-red-300' : ''}`}>
                 {eventLedger?.totals.dead_lettered ?? '—'}
+              </p>
+            </div>
+            <div className="rounded border border-gray-700 p-3">
+              <p className="text-gray-400 text-xs">TTL Risk</p>
+              <p className={`text-xl font-semibold ${(expiredPendingEvents + expiringSoonEvents) > 0 ? 'text-amber-300' : ''}`}>
+                {expiredPendingEvents + expiringSoonEvents}
+              </p>
+              <p className="text-[11px] text-gray-500 mt-1">
+                {expiredPendingEvents} expired
               </p>
             </div>
           </div>
