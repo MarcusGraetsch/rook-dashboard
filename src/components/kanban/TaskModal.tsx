@@ -10,7 +10,28 @@ interface Task {
   id: string
   column_id: string
   target_board_id?: string | null
-  target_status?: 'intake' | 'ready' | 'backlog' | 'in_progress' | 'testing' | 'review' | 'blocked' | 'done'
+  target_status?: 'intake' | 'ready' | 'backlog' | 'in_progress' | 'testing' | 'review' | 'rework' | 'human_review' | 'merging' | 'blocked' | 'done'
+  workflow_stage?: string | null
+  artifacts?: Array<
+    | { type: 'pr_link'; url: string; number?: number; title?: string }
+    | { type: 'test_results'; passed: number; failed: number; skipped: number; summary?: string }
+    | { type: 'complexity_analysis'; lines_changed: number; files_touched: number; risk_score: 'low' | 'medium' | 'high' }
+    | { type: 'video_walkthrough'; url: string; description?: string }
+    | { type: 'code_change'; file_path: string; description: string }
+  >
+  retry?: {
+    attempt: number
+    max_attempts: number
+    backoff_ms: number
+    last_error: string | null
+    next_retry_at: string | null
+    history: Array<{
+      attempted_at: string
+      error: string
+      succeeded: boolean
+    }>
+  } | null
+  parent_task?: string | null
   title: string
   description: string | null
   intake_brief?: string | null
@@ -139,6 +160,14 @@ interface ChecklistDraftItem {
   position: number
 }
 
+interface ChildTask {
+  task_id: string
+  project_id: string
+  title: string
+  status: string
+  priority: string
+}
+
 const AGENTS = [
   { id: 'rook', name: 'Rook 🦅' },
   { id: 'coach', name: 'Coach 🧠' },
@@ -173,8 +202,9 @@ function DatePicker({ value, onChange }: { value: string; onChange: (d: string) 
     function handleClickOutside(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setIsOpen(false)
-      }
-    }
+  }
+}
+
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
@@ -306,6 +336,8 @@ export function TaskModal({ task, isOpen, boards = [], currentBoardId = null, on
   const [gitContext, setGitContext] = useState<TaskGitContext | null>(null)
   const [gitContextLoading, setGitContextLoading] = useState(false)
   const [gitContextError, setGitContextError] = useState<string | null>(null)
+  const [childTasks, setChildTasks] = useState<ChildTask[]>([])
+  const [childTasksLoading, setChildTasksLoading] = useState(false)
 
   useEffect(() => {
     if (task) {
@@ -348,6 +380,8 @@ export function TaskModal({ task, isOpen, boards = [], currentBoardId = null, on
     setRefinementError(null)
     setRefinementLoading(false)
     setPlanningLoading(false)
+    setChildTasks([])
+    setChildTasksLoading(false)
   }, [task?.id, isOpen, currentBoardId])
 
   useEffect(() => {
@@ -427,6 +461,48 @@ export function TaskModal({ task, isOpen, boards = [], currentBoardId = null, on
     }
   }, [task?.canonical_task_id, task?.project_id, isOpen])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadChildTasks() {
+      if (!isOpen || !task?.canonical_task_id || !task?.project_id) {
+        setChildTasks([])
+        setChildTasksLoading(false)
+        return
+      }
+
+      setChildTasksLoading(true)
+      try {
+        const params = new URLSearchParams({
+          parent_task: task.canonical_task_id,
+          project_id: task.project_id,
+        })
+        const res = await fetch(`/api/control/tasks?${params.toString()}`)
+        const json = await res.json()
+        if (!res.ok) {
+          throw new Error(json.error || 'Failed to load child tasks.')
+        }
+        if (!cancelled) {
+          setChildTasks(Array.isArray(json.tasks) ? json.tasks : [])
+        }
+      } catch {
+        if (!cancelled) {
+          setChildTasks([])
+        }
+      } finally {
+        if (!cancelled) {
+          setChildTasksLoading(false)
+        }
+      }
+    }
+
+    loadChildTasks()
+
+    return () => {
+      cancelled = true
+    }
+  }, [task?.canonical_task_id, task?.project_id, isOpen])
+
   if (!isOpen) return null
 
   const isDoneTask = task?.column_name?.toLowerCase() === 'done'
@@ -449,6 +525,64 @@ export function TaskModal({ task, isOpen, boards = [], currentBoardId = null, on
   const doneMetadataWarning = (gitContext?.pull_request?.state || task?.pr_state || null) !== 'merged'
     && (gitActivityStatus === 'merged' || isDoneTask || task?.canonical_status === 'done')
   const warningText = task?.card_warning || task?.failure_reason || task?.blocked_reason || null
+  const retryBadge = task?.retry && task.retry.attempt > 0
+    ? `Retry ${task.retry.attempt}/${task.retry.max_attempts}${task.retry.next_retry_at ? ` · Next ${format(new Date(task.retry.next_retry_at), 'dd.MM.yyyy HH:mm')}` : ''}`
+    : null
+
+  function renderArtifact(artifact: NonNullable<Task['artifacts']>[number], index: number) {
+    switch (artifact.type) {
+      case 'pr_link':
+        return (
+          <a
+            key={`${artifact.type}-${index}`}
+            href={artifact.url}
+            target="_blank"
+            rel="noreferrer"
+            className="block rounded border border-gray-700 px-3 py-2 text-blue-300 hover:underline"
+          >
+            PR {artifact.number ? `#${artifact.number}` : ''} {artifact.title || artifact.url}
+          </a>
+        )
+      case 'test_results':
+        return (
+          <div key={`${artifact.type}-${index}`} className="rounded border border-gray-700 px-3 py-2">
+            <p className="text-gray-200">
+              Tests: {artifact.passed} passed, {artifact.failed} failed, {artifact.skipped} skipped
+            </p>
+            {artifact.summary && <p className="text-gray-500 mt-1">{artifact.summary}</p>}
+          </div>
+        )
+      case 'complexity_analysis':
+        return (
+          <div key={`${artifact.type}-${index}`} className="rounded border border-gray-700 px-3 py-2">
+            <p className="text-gray-200">
+              {artifact.lines_changed} lines changed · {artifact.files_touched} files · {artifact.risk_score} risk
+            </p>
+          </div>
+        )
+      case 'video_walkthrough':
+        return (
+          <a
+            key={`${artifact.type}-${index}`}
+            href={artifact.url}
+            target="_blank"
+            rel="noreferrer"
+            className="block rounded border border-gray-700 px-3 py-2 text-blue-300 hover:underline"
+          >
+            {artifact.description || 'Video walkthrough'}
+          </a>
+        )
+      case 'code_change':
+        return (
+          <div key={`${artifact.type}-${index}`} className="rounded border border-gray-700 px-3 py-2">
+            <p className="font-mono text-xs text-gray-400">{artifact.file_path}</p>
+            <p className="text-gray-200 mt-1">{artifact.description}</p>
+          </div>
+        )
+      default:
+        return null
+    }
+  }
 
   async function handleRefine() {
     const brief = intakeBrief.trim() || description.trim() || title.trim()
@@ -971,6 +1105,71 @@ export function TaskModal({ task, isOpen, boards = [], currentBoardId = null, on
                   </p>
                 </div>
               </div>
+
+              {(task.workflow_stage || retryBadge || task.parent_task || (Array.isArray(task.artifacts) && task.artifacts.length > 0) || childTasksLoading || childTasks.length > 0) && (
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-gray-300">Symphony State</h4>
+
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-500">Workflow Stage</p>
+                      <p className="text-violet-300">{task.workflow_stage || 'n/a'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Retry Status</p>
+                      <p className={retryBadge ? 'text-amber-300' : 'text-gray-300'}>
+                        {retryBadge || 'No retry scheduled'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {task.parent_task && (
+                    <div className="text-sm space-y-2">
+                      <p className="text-gray-500">Parent Task</p>
+                      <a
+                        href={`/kanban?task_id=${encodeURIComponent(task.parent_task)}${task.project_id ? `&project_id=${encodeURIComponent(task.project_id)}` : ''}`}
+                        className="text-blue-300 hover:underline font-mono text-xs break-all"
+                      >
+                        ↳ {task.parent_task}
+                      </a>
+                    </div>
+                  )}
+
+                  {Array.isArray(task.artifacts) && task.artifacts.length > 0 && (
+                    <div className="text-sm space-y-2">
+                      <p className="text-gray-500">Proof of Work Artifacts</p>
+                      <div className="space-y-2">
+                        {task.artifacts.map((artifact, index) => renderArtifact(artifact as NonNullable<Task['artifacts']>[number], index))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="text-sm space-y-2">
+                    <p className="text-gray-500">Child Tasks</p>
+                    {childTasksLoading ? (
+                      <p className="text-gray-300">Loading child tasks...</p>
+                    ) : childTasks.length > 0 ? (
+                      <div className="space-y-2">
+                        {childTasks.map((child) => (
+                          <a
+                            key={child.task_id}
+                            href={`/kanban?task_id=${encodeURIComponent(child.task_id)}&project_id=${encodeURIComponent(child.project_id)}`}
+                            className="block rounded border border-gray-700 px-3 py-2 hover:border-highlight"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-mono text-xs text-gray-400">{child.task_id}</span>
+                              <span className="text-xs text-gray-500">{child.status}</span>
+                            </div>
+                            <p className="text-gray-200 mt-1">{child.title}</p>
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-gray-300">No child tasks linked.</p>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {task.failure_reason && (
                 <div className="rounded border border-red-900/50 bg-red-950/20 px-3 py-3 text-sm">

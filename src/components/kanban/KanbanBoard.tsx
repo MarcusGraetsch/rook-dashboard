@@ -25,7 +25,28 @@ interface Task {
   id: string
   column_id: string
   target_board_id?: string | null
-  target_status?: 'intake' | 'ready' | 'backlog' | 'in_progress' | 'testing' | 'review' | 'blocked' | 'done'
+  target_status?: 'intake' | 'ready' | 'backlog' | 'in_progress' | 'testing' | 'review' | 'rework' | 'human_review' | 'merging' | 'blocked' | 'done'
+  workflow_stage?: string | null
+  artifacts?: Array<
+    | { type: 'pr_link'; url: string; number?: number; title?: string }
+    | { type: 'test_results'; passed: number; failed: number; skipped: number; summary?: string }
+    | { type: 'complexity_analysis'; lines_changed: number; files_touched: number; risk_score: 'low' | 'medium' | 'high' }
+    | { type: 'video_walkthrough'; url: string; description?: string }
+    | { type: 'code_change'; file_path: string; description: string }
+  >
+  retry?: {
+    attempt: number
+    max_attempts: number
+    backoff_ms: number
+    last_error: string | null
+    next_retry_at: string | null
+    history: Array<{
+      attempted_at: string
+      error: string
+      succeeded: boolean
+    }>
+  } | null
+  parent_task?: string | null
   title: string
   description: string | null
   intake_brief?: string | null
@@ -91,6 +112,12 @@ function statusToColumnName(status: string | null | undefined): string | null {
       return 'Testing'
     case 'review':
       return 'Review'
+    case 'rework':
+      return 'Rework'
+    case 'human_review':
+      return 'Human Review'
+    case 'merging':
+      return 'Merging'
     case 'blocked':
       return 'Blocked'
     case 'done':
@@ -188,6 +215,18 @@ export function KanbanBoard() {
     setActiveBoardId(readStoredBoardId())
     fetchBoards()
   }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const taskId = params.get('task_id')
+    const taskProjectId = params.get('project_id')
+    if (!taskId) return
+    const task = findTask(taskId, taskProjectId)
+    if (task) {
+      setActiveTask(task)
+    }
+  }, [boards, activeBoardId])
 
   useEffect(() => {
     const refreshIfVisible = () => {
@@ -653,10 +692,10 @@ export function KanbanBoard() {
     return null
   }
 
-  function findTask(taskId: string): Task | undefined {
+  function findTask(taskId: string, projectId?: string | null): Task | undefined {
     for (const board of boards) {
       for (const column of board.columns) {
-        const task = column.tasks.find(t => t.id === taskId)
+        const task = column.tasks.find((t) => t.id === taskId && (!projectId || t.project_id === projectId))
         if (task) return task
       }
     }

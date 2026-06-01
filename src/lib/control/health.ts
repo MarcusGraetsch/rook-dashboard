@@ -53,11 +53,14 @@ export interface HealthSnapshot {
   last_seen_at: string;
   workspace: string;
   queue_depth: number;
+  retry_queue_depth: number;
   last_error: string | null;
   last_completed_task: string | null;
   repo_heads: Record<string, string>;
   queued_tasks: QueuedTask[];
   blocked_tasks: BlockedTask[];
+  running_sessions_count: number;
+  max_concurrent: number | null;
   runtime: {
     session_count: number;
     latest_session_update_at: string | null;
@@ -153,9 +156,12 @@ function deriveStatus(agentId: string, tasks: CanonicalTask[]) {
   const blocked = assigned.filter((task) => task.status === 'blocked');
   const testing = assigned.filter((task) => task.status === 'testing');
   const review = assigned.filter((task) => task.status === 'review');
+  const rework = assigned.filter((task) => task.status === 'rework');
+  const humanReview = assigned.filter((task) => task.status === 'human_review');
+  const merging = assigned.filter((task) => task.status === 'merging');
   const done = assigned.filter((task) => task.status === 'done');
   const currentTask =
-    inProgress[0]?.task_id || testing[0]?.task_id || review[0]?.task_id || null;
+    inProgress[0]?.task_id || testing[0]?.task_id || review[0]?.task_id || rework[0]?.task_id || humanReview[0]?.task_id || merging[0]?.task_id || null;
 
   // Most recently completed task
   const lastCompleted =
@@ -189,7 +195,7 @@ function deriveStatus(agentId: string, tasks: CanonicalTask[]) {
   else if (inProgress.length > 0 || testing.length > 0 || review.length > 0) status = 'in_progress';
   else if (ready.length > 0) status = 'ready';
 
-  const activeStatuses = new Set(['ready', 'in_progress', 'testing', 'review']);
+  const activeStatuses = new Set(['ready', 'in_progress', 'testing', 'review', 'rework', 'human_review', 'merging']);
   const queuedTasks: QueuedTask[] = assigned
     .filter((t) => activeStatuses.has(t.status))
     .map((t) => ({ task_id: t.task_id, title: t.title || t.task_id, status: t.status, priority: t.priority }));
@@ -220,6 +226,15 @@ async function buildSnapshot(agentId: string, preloadedTasks?: CanonicalTask[]):
     readRuntimeSmoke(),
     preloadedTasks ? Promise.resolve(preloadedTasks) : getCanonicalTasks(),
   ]);
+  const retryQueueDepth = tasks.filter((task) => {
+    if (task.assigned_agent !== agentId) {
+      return false;
+    }
+    if (!task.retry?.next_retry_at) {
+      return false;
+    }
+    return Date.parse(task.retry.next_retry_at) > Date.now();
+  }).length;
   const smokeEntry = runtimeSmoke?.results?.find((entry) => entry.agent_id === agentId) || null;
   const taskState = deriveStatus(agentId, tasks);
   const [remote, head] = await Promise.all([gitRemote(workspace), gitHead(workspace)]);
@@ -249,11 +264,14 @@ async function buildSnapshot(agentId: string, preloadedTasks?: CanonicalTask[]):
     last_seen_at: runtime.latest || new Date().toISOString(),
     workspace,
     queue_depth: taskState.queueDepth,
+    retry_queue_depth: retryQueueDepth,
     last_error: derivedError,
     last_completed_task: taskState.lastCompleted,
     repo_heads: remote && head ? { [remote]: head } : {},
     queued_tasks: taskState.queuedTasks,
     blocked_tasks: taskState.blockedTasks,
+    running_sessions_count: runtime.count,
+    max_concurrent: null,
     runtime: {
       session_count: runtime.count,
       latest_session_update_at: runtime.latest,

@@ -24,8 +24,11 @@ const STATUS_TO_COLUMN: Record<string, string> = {
   intake: 'Intake',
   ready: 'Ready',
   in_progress: 'In Progress',
-  testing: 'Testing',
   review: 'Review',
+  rework: 'Rework',
+  human_review: 'Human Review',
+  merging: 'Merging',
+  testing: 'Testing',
   blocked: 'Blocked',
   done: 'Done',
 };

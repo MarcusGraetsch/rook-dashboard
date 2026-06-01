@@ -10,7 +10,7 @@ interface Task {
   id: string
   column_id: string
   target_board_id?: string | null
-  target_status?: 'intake' | 'ready' | 'backlog' | 'in_progress' | 'testing' | 'review' | 'blocked' | 'done'
+  target_status?: 'intake' | 'ready' | 'backlog' | 'in_progress' | 'testing' | 'review' | 'rework' | 'human_review' | 'merging' | 'blocked' | 'done'
   title: string
   description: string | null
   intake_brief?: string | null
@@ -38,6 +38,26 @@ interface Task {
   commit_count?: number
   pr_state?: 'open' | 'closed' | 'merged' | null
   pr_number?: number | null
+  workflow_stage?: string | null
+  artifacts?: Array<
+    | { type: 'pr_link'; url: string; number?: number; title?: string }
+    | { type: 'test_results'; passed: number; failed: number; skipped: number; summary?: string }
+    | { type: 'complexity_analysis'; lines_changed: number; files_touched: number; risk_score: 'low' | 'medium' | 'high' }
+    | { type: 'video_walkthrough'; url: string; description?: string }
+    | { type: 'code_change'; file_path: string; description: string }
+  >
+  retry?: {
+    attempt: number
+    max_attempts: number
+    backoff_ms: number
+    last_error: string | null
+    next_retry_at: string | null
+    history: Array<{
+      attempted_at: string
+      error: string
+      succeeded: boolean
+    }>
+  } | null
   test_status?: 'passed' | 'failed' | null
   review_verdict?: 'approved' | 'changes_requested' | null
   has_handoff_notes?: boolean
@@ -191,6 +211,11 @@ export function KanbanCard({ task, boards = [], currentBoardId = null, isDraggin
   const doneWarning = (task.pipeline_state === 'done' || task.canonical_status === 'done' || task.column_name?.toLowerCase() === 'done')
     && task.pr_state !== 'merged'
   const warningText = task.card_warning || task.failure_reason || task.blocked_reason || null
+  const retryBadge = task.retry && task.retry.attempt > 0
+    ? `Retry ${task.retry.attempt}/${task.retry.max_attempts}${task.retry.next_retry_at ? ` · Next ${new Date(task.retry.next_retry_at).toLocaleString('de-DE')}` : ''}`
+    : null
+  const workflowStageBadge = task.workflow_stage ? `Stage: ${task.workflow_stage}` : null
+  const artifactCount = Array.isArray(task.artifacts) ? task.artifacts.length : 0
 
   return (
     <>
@@ -279,6 +304,24 @@ export function KanbanCard({ task, boards = [], currentBoardId = null, isDraggin
                 <span className={`text-xs px-1.5 py-0.5 rounded ${runtimeBadge.className}`}>
                   {runtimeBadge.text}
                 </span>
+
+                {workflowStageBadge && (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-violet-900/50 text-violet-300">
+                    {workflowStageBadge}
+                  </span>
+                )}
+
+                {retryBadge && (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-amber-900/50 text-amber-300">
+                    {retryBadge}
+                  </span>
+                )}
+
+                {artifactCount > 0 && (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-sky-900/50 text-sky-300">
+                    {artifactCount} artifact{artifactCount === 1 ? '' : 's'}
+                  </span>
+                )}
 
                 {/* Stuck-task indicator: amber pulse when running > 30m without heartbeat update */}
                 {task.pipeline_state === 'running' && task.last_heartbeat && (() => {

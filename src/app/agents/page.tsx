@@ -49,11 +49,14 @@ interface HealthSnapshot {
   last_seen_at: string
   workspace: string
   queue_depth: number
+  retry_queue_depth?: number
   last_error: string | null
   last_completed_task: string | null
   repo_heads: Record<string, string>
   queued_tasks?: QueuedTask[]
   blocked_tasks?: BlockedTask[]
+  running_sessions_count?: number
+  max_concurrent?: number | null
   runtime: {
     session_count: number
     latest_session_update_at: string | null
@@ -94,6 +97,9 @@ const STATUS_LABELS: Record<string, string> = {
   in_progress: 'active',
   testing: 'testing',
   review: 'review',
+  rework: 'rework',
+  human_review: 'waiting for human',
+  merging: 'merging',
   blocked: 'blocked',
 }
 
@@ -101,7 +107,10 @@ function QueuePanel({ snapshot }: { snapshot: HealthSnapshot | undefined }) {
   const [open, setOpen] = useState(false)
   const queued = snapshot?.queued_tasks || []
   const blocked = snapshot?.blocked_tasks || []
-  if (queued.length === 0 && blocked.length === 0) return null
+  const retryQueueDepth = snapshot?.retry_queue_depth || 0
+  const runningSessions = snapshot?.running_sessions_count ?? snapshot?.runtime.session_count ?? 0
+  const maxConcurrent = snapshot?.max_concurrent
+  if (queued.length === 0 && blocked.length === 0 && retryQueueDepth === 0 && runningSessions === 0) return null
   const MAX_SHOW = 5
   return (
     <div className="border-t border-gray-700 mt-3 pt-3">
@@ -115,6 +124,13 @@ function QueuePanel({ snapshot }: { snapshot: HealthSnapshot | undefined }) {
           {queued.length > 0 && `${queued.length} queued`}
           {queued.length > 0 && blocked.length > 0 && ' · '}
           {blocked.length > 0 && <span className="text-orange-400">{blocked.length} blocked</span>}
+          {(retryQueueDepth > 0 || runningSessions > 0) && (
+            <span className="ml-2 text-gray-500">
+              {retryQueueDepth > 0 && `${retryQueueDepth} retry`}
+              {retryQueueDepth > 0 && runningSessions > 0 && ' · '}
+              {runningSessions > 0 && `${runningSessions}${maxConcurrent ? `/${maxConcurrent}` : ''} running`}
+            </span>
+          )}
         </span>
       </button>
       {open && (

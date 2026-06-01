@@ -188,6 +188,9 @@ function inferStatus(columnName: string): TaskStatus {
 
   if (value.includes('intake') || value.includes('refine') || value.includes('triage')) return 'intake';
   if (value.includes('blocked')) return 'blocked';
+  if (value.includes('human review')) return 'human_review' as TaskStatus;
+  if (value.includes('merging')) return 'merging' as TaskStatus;
+  if (value.includes('rework')) return 'rework' as TaskStatus;
   if (value.includes('review')) return 'review';
   if (value.includes('test')) return 'testing';
   if (
@@ -217,10 +220,16 @@ function statusToColumnName(status: TaskStatus): string | null {
       return 'Ready';
     case 'in_progress':
       return 'In Progress';
-    case 'testing':
-      return 'Testing';
     case 'review':
       return 'Review';
+    case 'rework':
+      return 'Rework';
+    case 'human_review':
+      return 'Human Review';
+    case 'merging':
+      return 'Merging';
+    case 'testing':
+      return 'Testing';
     case 'done':
       return 'Done';
     case 'blocked':

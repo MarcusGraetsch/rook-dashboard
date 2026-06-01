@@ -3,8 +3,11 @@ export const WORKFLOW_COLUMNS = [
   { name: 'Intake', color: '#1d4ed8' },
   { name: 'Ready', color: '#0f766e' },
   { name: 'In Progress', color: '#3b82f6' },
-  { name: 'Testing', color: '#7c3aed' },
   { name: 'Review', color: '#c2410c' },
+  { name: 'Rework', color: '#f97316' },
+  { name: 'Human Review', color: '#2563eb' },
+  { name: 'Merging', color: '#9333ea' },
+  { name: 'Testing', color: '#7c3aed' },
   { name: 'Blocked', color: '#b91c1c' },
   { name: 'Done', color: '#22c55e' },
 ] as const;

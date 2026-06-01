@@ -11,7 +11,7 @@ interface Task {
   id: string
   column_id: string
   target_board_id?: string | null
-  target_status?: 'intake' | 'ready' | 'backlog' | 'in_progress' | 'testing' | 'review' | 'blocked' | 'done'
+  target_status?: 'intake' | 'ready' | 'backlog' | 'in_progress' | 'testing' | 'review' | 'rework' | 'human_review' | 'merging' | 'blocked' | 'done'
   title: string
   description: string | null
   intake_brief?: string | null

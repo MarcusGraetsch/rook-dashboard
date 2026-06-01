@@ -17,11 +17,70 @@ export type TaskStatus =
   | 'ready'
   | 'in_progress'
   | 'review'
+  | 'rework'
+  | 'human_review'
+  | 'merging'
   | 'testing'
   | 'blocked'
   | 'done';
 
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+export type ArtifactType = 'pr_link' | 'test_results' | 'complexity_analysis' | 'video_walkthrough' | 'code_change';
+
+export interface TestResultsArtifact {
+  type: 'test_results';
+  passed: number;
+  failed: number;
+  skipped: number;
+  summary?: string;
+}
+
+export interface ComplexityArtifact {
+  type: 'complexity_analysis';
+  lines_changed: number;
+  files_touched: number;
+  risk_score: 'low' | 'medium' | 'high';
+}
+
+export interface PRLinkArtifact {
+  type: 'pr_link';
+  url: string;
+  number?: number;
+  title?: string;
+}
+
+export interface VideoWalkthroughArtifact {
+  type: 'video_walkthrough';
+  url: string;
+  description?: string;
+}
+
+export interface CodeChangeArtifact {
+  type: 'code_change';
+  file_path: string;
+  description: string;
+}
+
+export type Artifact =
+  | PRLinkArtifact
+  | TestResultsArtifact
+  | ComplexityArtifact
+  | VideoWalkthroughArtifact
+  | CodeChangeArtifact;
+
+export interface RetryInfo {
+  attempt: number;
+  max_attempts: number;
+  backoff_ms: number;
+  last_error: string | null;
+  next_retry_at: string | null;
+  history: Array<{
+    attempted_at: string;
+    error: string;
+    succeeded: boolean;
+  }>;
+}
 
 export interface CanonicalTask {
   task_id: string;
@@ -46,12 +105,15 @@ export interface CanonicalTask {
   commit_refs?: string[];
   labels?: string[];
   workflow_stage?: string;
+  parent_task?: string | null;
+  child_tasks?: string[];
   blocked_reason?: string | null;
   handoff_notes?: string;
   last_heartbeat?: string | null;
   failure_reason?: string | null;
   source_channel?: string | null;
-  artifacts?: string[];
+  artifacts?: Artifact[];
+  retry?: RetryInfo;
   checklist?: Array<{
     title: string;
     completed: boolean;
@@ -353,13 +415,39 @@ async function readAllCanonicalTasksFromDisk(): Promise<CanonicalTask[]> {
   });
 }
 
-export async function getCanonicalTasks(): Promise<CanonicalTask[]> {
+export async function getCanonicalTasks(filters?: {
+  status?: TaskStatus;
+  assigned_agent?: string;
+  workflow_stage?: string;
+  parent_task?: string;
+  project_id?: string;
+}): Promise<CanonicalTask[]> {
   if (_taskCache && Date.now() < _taskCache.expiresAt) {
-    return _taskCache.tasks;
+    const cached = _taskCache.tasks;
+    return filters
+      ? cached.filter((task) => {
+          if (filters.status && task.status !== filters.status) return false;
+          if (filters.assigned_agent && task.assigned_agent !== filters.assigned_agent) return false;
+          if (filters.workflow_stage && task.workflow_stage !== filters.workflow_stage) return false;
+          if (filters.parent_task !== undefined && task.parent_task !== filters.parent_task) return false;
+          if (filters.project_id && task.project_id !== filters.project_id) return false;
+          return true;
+        })
+      : cached;
   }
   const tasks = await readAllCanonicalTasksFromDisk();
   _taskCache = { tasks, expiresAt: Date.now() + CACHE_TTL_MS };
-  return tasks;
+  if (!filters) {
+    return tasks;
+  }
+  return tasks.filter((task) => {
+    if (filters.status && task.status !== filters.status) return false;
+    if (filters.assigned_agent && task.assigned_agent !== filters.assigned_agent) return false;
+    if (filters.workflow_stage && task.workflow_stage !== filters.workflow_stage) return false;
+    if (filters.parent_task !== undefined && task.parent_task !== filters.parent_task) return false;
+    if (filters.project_id && task.project_id !== filters.project_id) return false;
+    return true;
+  });
 }
 
 export async function getCanonicalTask(taskId: string, projectId?: string | null): Promise<CanonicalTask | null> {
