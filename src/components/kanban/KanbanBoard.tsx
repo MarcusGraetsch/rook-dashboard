@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -155,6 +155,7 @@ export function KanbanBoard() {
   const [loading, setLoading] = useState(true)
   const [showNewBoard, setShowNewBoard] = useState(false)
   const [newBoardName, setNewBoardName] = useState('')
+  const fetchInFlightRef = useRef(false)
   const activeBoard = activeBoardId
     ? boards.find((board) => board.id === activeBoardId) || null
     : null
@@ -189,14 +190,27 @@ export function KanbanBoard() {
   }, [])
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      fetchBoards()
-    }, 5000)
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') {
+        fetchBoards()
+      }
+    }
 
-    return () => window.clearInterval(timer)
+    const timer = window.setInterval(refreshIfVisible, 5000)
+    document.addEventListener('visibilitychange', refreshIfVisible)
+
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', refreshIfVisible)
+    }
   }, [])
 
   async function fetchBoards() {
+    if (fetchInFlightRef.current) {
+      return
+    }
+
+    fetchInFlightRef.current = true
     try {
       const res = await fetch('/api/kanban/boards')
       if (res.ok) {
@@ -222,6 +236,7 @@ export function KanbanBoard() {
     } catch (e) {
       console.error('Failed to fetch boards:', e)
     } finally {
+      fetchInFlightRef.current = false
       setLoading(false)
     }
   }
@@ -737,9 +752,9 @@ export function KanbanBoard() {
         {activeBoard ? (
           <div className="flex-1 overflow-x-auto p-4">
             <div className="flex gap-4 h-full">
-              {activeBoard.columns
+              {[...activeBoard.columns]
                 .sort((a, b) => a.position - b.position)
-                .map(column => (
+                .map((column) => (
                   <KanbanColumn
                     key={column.id}
                     column={column}

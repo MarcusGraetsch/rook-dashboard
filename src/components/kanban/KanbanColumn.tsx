@@ -88,7 +88,8 @@ export function KanbanColumn({ column, boards = [], onAddTask, onUpdateTask, onD
     setIsAdding(false)
   }
 
-  const taskIds = column.tasks.map(t => t.id)
+  const taskIds = column.tasks.map((t) => t.id)
+  const sortedTasks = [...column.tasks].sort((a, b) => a.position - b.position)
 
   return (
     <>
@@ -123,9 +124,7 @@ export function KanbanColumn({ column, boards = [], onAddTask, onUpdateTask, onD
           className="p-2 space-y-2 min-h-[200px] max-h-[calc(100vh-300px)] overflow-y-auto"
         >
           <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
-            {column.tasks
-              .sort((a, b) => a.position - b.position)
-              .map(task => (
+            {sortedTasks.map((task) => (
                 <KanbanCard
                   key={task.id}
                   task={task}
